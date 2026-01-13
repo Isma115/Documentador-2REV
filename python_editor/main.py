@@ -80,16 +80,13 @@ class CodeEditorApp(ctk.CTk):
         self.search_entry.pack(fill="x", padx=10, pady=(0, 10))
         self.search_entry.bind("<KeyRelease>", self.filter_file_list)
 
-        # Scrollable List for files
-        self.file_list_frame = ctk.CTkScrollableFrame(
-            self.side_panel, 
-            label_text=None,
-            fg_color="transparent"
-        )
-        self.file_list_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # Virtual List for assets
+        from virtual_list import VirtualList
+        self.file_list = VirtualList(self.side_panel, item_height=30)
+        self.file_list.pack(fill="both", expand=True, padx=5, pady=5)
         
         # Placeholder items
-        self.add_placeholder_item("No files to show")
+        self.file_list.set_data(["No files to show"])
 
     def load_project(self):
         folder_selected = filedialog.askdirectory()
@@ -104,56 +101,27 @@ class CodeEditorApp(ctk.CTk):
         self.populate_asset_list()
 
     def populate_asset_list(self, filter_text=""):
-        # Clear existing items
-        for widget in self.file_list_frame.winfo_children():
-            widget.destroy()
-            
         if not hasattr(self, 'all_assets') or not self.all_assets:
-            self.add_placeholder_item("No code assets found")
+            self.file_list.set_data(["No code assets found"])
             return
 
-        count = 0
+        filtered_assets = []
         for asset in self.all_assets:
-            # Filter logic
             if filter_text.lower() in asset.name.lower():
-                self.add_asset_item(asset)
-                count += 1
+                filtered_assets.append(asset)
         
-        if count == 0:
-            self.add_placeholder_item("No matches found")
+        if not filtered_assets:
+            self.file_list.set_data(["No matches found"])
+        else:
+            self.file_list.set_data(filtered_assets)
 
     def filter_file_list(self, event=None):
         if hasattr(self, 'all_assets'):
             filter_text = self.search_entry.get()
             self.populate_asset_list(filter_text)
 
-    def add_asset_item(self, asset):
-        # Different icons/text based on type
-        icon = "📝"
-        if asset.asset_type == 'Class':
-            icon = "📦"
-        elif asset.asset_type == 'Function':
-            icon = "ƒ "
-        elif asset.asset_type == 'Variable':
-            icon = "🔧"
-        elif asset.asset_type == 'Constant':
-            icon = "💎"
-
-        display_text = f"{icon} {asset.name} ({os.path.basename(asset.file_path)})"
-        
-        lbl = ctk.CTkLabel(
-            self.file_list_frame, 
-            text=display_text, 
-            anchor="w",
-            cursor="hand2"
-        )
-        lbl.pack(fill="x", pady=2, padx=5)
-        # Bind click event later for navigating to line
 
 
-    def add_placeholder_item(self, text):
-        lbl = ctk.CTkLabel(self.file_list_frame, text=text, text_color="gray")
-        lbl.pack(pady=20)
 
 if __name__ == "__main__":
     app = CodeEditorApp()
