@@ -9,36 +9,51 @@ PATTERNS = {
         'patterns': [
             (r'^\s*class\s+(\w+)', 'Class'),
             (r'^\s*def\s+(\w+)', 'Function'),
-            (r'^\s*([A-Z_][A-Z0-9_]*)\s*=', 'Constant')
+            (r'^\s*([A-Z_][A-Z0-9_]*)\s*=', 'Variable'), # Mapping constant to Variable/Pink category for now, or distinct
+            (r'^\s*#\s*region\s+(.+)', 'Region')
         ]
     },
     'javascript': {
         'extensions': ['.js', '.jsx', '.ts', '.tsx'],
         'patterns': [
+            # React Components (PascalCase functions)
+            (r'^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Z]\w+)', 'Component'),
+            (r'^\s*(?:export\s+)?(?:const|var|let)\s+([A-Z]\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[\w\d]+)\s*=>', 'Component'), # Arrow func component
             (r'^\s*class\s+(\w+)', 'Class'),
-            (r'^\s*(?:async\s+)?function\s+(\w+)', 'Function'),
-            (r'^\s*(?:const|var|let)\s+(\w+)\s*=', 'Variable')
+            (r'^\s*(?:async\s+)?function\s+([a-z]\w+)', 'Function'), # camelCase functions
+            (r'^\s*(?:const|var|let)\s+([a-z]\w+)\s*=', 'Variable'),
+            (r'^\s*//\s*#region\s+(.+)', 'Region')
         ]
     },
     'cpp': {
         'extensions': ['.cpp', '.c', '.h', '.hpp'],
         'patterns': [
             (r'^\s*class\s+(\w+)', 'Class'),
-            (r'^\s*\w+\s+(\w+)\s*\(', 'Function')
+            (r'^\s*\w+\s+(\w+)\s*\(', 'Function'),
+            (r'^\s*#pragma\s+region\s+(.+)', 'Region')
         ]
+    },
+    'html': {
+         'extensions': ['.html', '.htm'],
+         'patterns': [
+             (r'<([a-zA-Z0-9-]+)(?:\s+[^>]*)?>', 'Component') # Treat tags as components
+         ]
     },
     'java': {
         'extensions': ['.java'],
         'patterns': [
             (r'^\s*(?:public|private|protected)?\s*class\s+(\w+)', 'Class'),
-            (r'^\s*(?:public|private|protected)?\s*(?:\w+\s+)+\s*(\w+)\s*\(', 'Function')
+            (r'^\s*(?:public|private|protected)?\s*(?:\w+\s+)+\s*(\w+)\s*\(', 'Function'),
+            # Region syntax in Java is usually IDE specific, e.g. //region
+             (r'^\s*//\s*region\s+(.+)', 'Region')
         ]
     },
     'csharp': {
         'extensions': ['.cs'],
         'patterns': [
             (r'^\s*(?:public|private|protected|internal)?\s*class\s+(\w+)', 'Class'),
-            (r'^\s*(?:public|private|protected|internal)?\s*(?:\w+\s+)+\s*(\w+)\s*\(', 'Function')
+            (r'^\s*(?:public|private|protected|internal)?\s*(?:\w+\s+)+\s*(\w+)\s*\(', 'Function'),
+            (r'^\s*#region\s+(.+)', 'Region')
         ]
     },
     'php': {
@@ -46,7 +61,8 @@ PATTERNS = {
         'patterns': [
             (r'^\s*class\s+(\w+)', 'Class'),
             (r'^\s*function\s+(\w+)', 'Function'),
-            (r'^\s*(\$\w+)\s*=', 'Variable')
+            (r'^\s*(\$\w+)\s*=', 'Variable'),
+            (r'^\s*#\s*region\s+(.+)', 'Region')
         ]
     },
     'ruby': {
@@ -54,13 +70,13 @@ PATTERNS = {
         'patterns': [
             (r'^\s*class\s+(\w+)', 'Class'),
             (r'^\s*def\s+(\w+)', 'Function'),
-            (r'^\s*([A-Z]\w*)\s*=', 'Constant')
+            (r'^\s*([A-Z]\w*)\s*=', 'Variable') # Constant
         ]
     },
      'go': {
         'extensions': ['.go'],
         'patterns': [
-            (r'^\s*type\s+(\w+)\s+struct', 'Class'), # Structs as classes roughly
+            (r'^\s*type\s+(\w+)\s+struct', 'Class'), 
             (r'^\s*func\s+(\w+)', 'Function')
         ]
     }

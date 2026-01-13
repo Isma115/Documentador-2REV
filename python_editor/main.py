@@ -82,7 +82,7 @@ class CodeEditorApp(ctk.CTk):
 
         # Virtual List for assets
         from virtual_list import VirtualList
-        self.file_list = VirtualList(self.side_panel, item_height=30)
+        self.file_list = VirtualList(self.side_panel, item_height=40)
         self.file_list.pack(fill="both", expand=True, padx=5, pady=5)
         
         # Placeholder items

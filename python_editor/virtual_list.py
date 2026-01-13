@@ -2,7 +2,7 @@ import customtkinter as ctk
 import tkinter as tk
 
 class VirtualList(ctk.CTkFrame):
-    def __init__(self, master, item_height=25, **kwargs):
+    def __init__(self, master, item_height=35, **kwargs):
         super().__init__(master, **kwargs)
         self.data = []
         self.item_height = item_height
@@ -11,17 +11,21 @@ class VirtualList(ctk.CTkFrame):
         self.bg_color = self._apply_appearance_mode(self._fg_color)
         
         # Canvas for scrolling
+        # Scrollbar (Pack first to ensure it gets space)
+        # Canvas for scrolling
         self.canvas = tk.Canvas(
             self, 
             bg="#2B2B2B", # Approximation of dark ctk background
             highlightthickness=0,
             bd=0
         )
-        self.canvas.pack(side="left", fill="both", expand=True)
-
-        # Scrollbar
+        
+        # Scrollbar (Pack first to ensure it gets space)
         self.scrollbar = ctk.CTkScrollbar(self, command=self.canvas.yview)
         self.scrollbar.pack(side="right", fill="y")
+        
+        self.canvas.pack(side="left", fill="both", expand=True)
+
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         # Bindings
@@ -124,74 +128,95 @@ class VirtualList(ctk.CTkFrame):
             widget = self.visible_widgets.pop(idx)
             widget.destroy()
             
-        # Create new widgets
-        to_create = needed_indices - current_indices
-        for idx in to_create:
-            item = self.data[idx]
-            y_pos = idx * self.item_height
-            
-            # Create the rendering widget
-            # We use a simple Frame+Label combo for speed/look
-            # Or just a Label
-            # We need to rely on the `render_item` internal method
-            
-            # Using a Frame to hold the label allows for better width management
-            frame = ctk.CTkFrame(
-                self.canvas, 
-                fg_color="transparent", 
-                height=self.item_height,
-                corner_radius=0
-            )
-            
-            # Content
-            self.create_item_widget(frame, item)
-
-            # Add to canvas
-            # We use `create_window` to place widgets on canvas
-            # Width=window_width
-            self.canvas.create_window(
-                0, y_pos, 
-                window=frame, 
-                anchor="nw", 
-                width=self.canvas.winfo_width(), 
-                height=self.item_height,
-                tags=f"row_{idx}"
-            )
-            self.visible_widgets[idx] = frame
-
-    def create_item_widget(self, parent, item):
-        # This can be overridden or callbacks used
-        # For now, custom implementation hardcoded for Assets
+        # Metrics
+        canvas_width = self.canvas.winfo_width()
+        # Increase margin to avoid right-side clipping (scrollbar overlap or DPI issues)
+        # 10px left, 15px right (total 25 reduction) -> reduced from 40
+        item_width = max(1, canvas_width - 25) 
+        item_actual_height = self.item_height - 6 # Slightly less gap (6px instead of 8)
+        x_pos = 10 # 10px left margin
         
+        # Update/Create loop
+        # We iterate over needed_indices to ensure everyone is correct (size/pos)
+        # Note: canvas.itemconfigure is efficient
+        
+        for idx in needed_indices:
+            y_pos = idx * self.item_height + 3 # 3px top padding/centering in slot
+
+            if idx in self.visible_widgets:
+                # Update existing
+                self.canvas.itemconfigure(f"row_{idx}", width=item_width, height=item_actual_height)
+                self.canvas.coords(f"row_{idx}", x_pos, y_pos)
+            else:
+                # Create new
+                item = self.data[idx]
+                
+                # Use CTkButton for the "Box" look - it handles borders/bg/text robustness better than Frame
+                # We disable hover effect if not desired, or keep it for interactivity
+                btn = ctk.CTkButton(
+                    self.canvas,
+                    text="", # Set in configure
+                    height=item_actual_height,
+                    corner_radius=6,
+                    border_width=2,
+                    anchor="w", # Left align text
+                    font=("Segoe UI", 12, "bold")
+                )
+                
+                # Configure Content
+                self.configure_item_button(btn, item)
+
+                # Add to canvas
+                self.canvas.create_window(
+                    x_pos, y_pos, 
+                    window=btn, 
+                    anchor="nw", 
+                    width=item_width, 
+                    height=item_actual_height,
+                    tags=f"row_{idx}"
+                )
+                self.visible_widgets[idx] = btn
+
+    def configure_item_button(self, btn, item):
         display_text = str(item)
+        
+        # Default colors
+        fg_color = "transparent"
+        text_color = "white"
+        hover_color = "#333333" # Fallback
+        
         if hasattr(item, 'name'):
-            # It's an Asset
-             # Different icons/text based on type
-            icon = "📝"
-            if item.asset_type == 'Class':
-                icon = "📦"
-            elif item.asset_type == 'Function':
-                icon = "ƒ "
-            elif item.asset_type == 'Variable':
-                icon = "🔧"
-            elif item.asset_type == 'Constant':
-                icon = "💎"
-
-            display_text = f"{icon} {item.name}"
-            # Add file path in smaller text? Maybe too crowded.
-            # display_text += f" ({os.path.basename(item.file_path)})"
-
-        lbl = ctk.CTkLabel(
-            parent, 
-            text=display_text, 
-            anchor="w",
-            font=("Segoe UI", 13)
+            display_text = f"  {item.name}" # Add indent for look
+            
+            if item.asset_type == 'Function':
+                fg_color = "#E3F2FD"
+                text_color = "#0D47A1"
+                hover_color = "#BBDEFB"
+            elif item.asset_type == 'Class':
+                fg_color = "#FFEBEE"
+                text_color = "#B71C1C"
+                hover_color = "#FFCDD2"
+            elif item.asset_type == 'Region':
+                fg_color = "#FFF3E0"
+                text_color = "#E65100"
+                hover_color = "#FFE0B2"
+            elif item.asset_type == 'Component':
+                fg_color = "#E8F5E9"
+                text_color = "#1B5E20"
+                hover_color = "#C8E6C9"
+            elif item.asset_type == 'Variable' or item.asset_type == 'Constant':
+                fg_color = "#FCE4EC"
+                text_color = "#880E4F"
+                hover_color = "#F8BBD0"
+        
+        btn.configure(
+            text=display_text,
+            fg_color=fg_color,
+            text_color=text_color,
+            border_color=text_color,
+            hover_color=hover_color
         )
-        lbl.pack(fill="both", expand=True, padx=5)
         
-        # Bind events to children so scrolling works over them too
-        parent.bind("<MouseWheel>", self.on_mousewheel)
-        lbl.bind("<MouseWheel>", self.on_mousewheel)
-        
-        # Create tooltip/click events here if needed
-        # lbl.bind("<Button-1>", lambda e: self.on_item_click(item))
+        # Bind scrolling to the button as well
+        btn.bind("<MouseWheel>", self.on_mousewheel)
+
