@@ -66,10 +66,19 @@ class CodeEditorApp(ctk.CTk):
         # Header for the list
         self.list_header = ctk.CTkLabel(
             self.side_panel, 
-            text="Project Files", 
+            text="Code Assets", 
             font=("Segoe UI", 13, "bold")
         )
-        self.list_header.pack(pady=10, padx=10, anchor="w")
+        self.list_header.pack(pady=(10, 5), padx=10, anchor="w")
+
+        # Search Bar
+        self.search_entry = ctk.CTkEntry(
+            self.side_panel,
+            placeholder_text="Search files...",
+            height=30
+        )
+        self.search_entry.pack(fill="x", padx=10, pady=(0, 10))
+        self.search_entry.bind("<KeyRelease>", self.filter_file_list)
 
         # Scrollable List for files
         self.file_list_frame = ctk.CTkScrollableFrame(
@@ -87,35 +96,60 @@ class CodeEditorApp(ctk.CTk):
         if folder_selected:
             self.current_project_path = folder_selected
             self.path_label.configure(text=f"{folder_selected}")
-            self.populate_file_list(folder_selected)
+            self.load_assets(folder_selected)
 
-    def populate_file_list(self, folder_path):
+    def load_assets(self, folder_path):
+        import asset_extractor
+        self.all_assets = asset_extractor.scan_project_assets(folder_path)
+        self.populate_asset_list()
+
+    def populate_asset_list(self, filter_text=""):
         # Clear existing items
         for widget in self.file_list_frame.winfo_children():
             widget.destroy()
             
-        try:
-            items = sorted(os.listdir(folder_path))
-            for item in items:
-                # Simple file/folder differentiation logic
-                full_path = os.path.join(folder_path, item)
-                if os.path.isdir(full_path):
-                    self.add_file_item(f"📁 {item}")
-                else:
-                    self.add_file_item(f"📄 {item}")
-        except Exception as e:
-            print(f"Error loading files: {e}")
-            self.add_placeholder_item("Error loading files")
+        if not hasattr(self, 'all_assets') or not self.all_assets:
+            self.add_placeholder_item("No code assets found")
+            return
 
-    def add_file_item(self, text):
+        count = 0
+        for asset in self.all_assets:
+            # Filter logic
+            if filter_text.lower() in asset.name.lower():
+                self.add_asset_item(asset)
+                count += 1
+        
+        if count == 0:
+            self.add_placeholder_item("No matches found")
+
+    def filter_file_list(self, event=None):
+        if hasattr(self, 'all_assets'):
+            filter_text = self.search_entry.get()
+            self.populate_asset_list(filter_text)
+
+    def add_asset_item(self, asset):
+        # Different icons/text based on type
+        icon = "📝"
+        if asset.asset_type == 'Class':
+            icon = "📦"
+        elif asset.asset_type == 'Function':
+            icon = "ƒ "
+        elif asset.asset_type == 'Variable':
+            icon = "🔧"
+        elif asset.asset_type == 'Constant':
+            icon = "💎"
+
+        display_text = f"{icon} {asset.name} ({os.path.basename(asset.file_path)})"
+        
         lbl = ctk.CTkLabel(
             self.file_list_frame, 
-            text=text, 
+            text=display_text, 
             anchor="w",
             cursor="hand2"
         )
         lbl.pack(fill="x", pady=2, padx=5)
-        # Bind click event later for opening files
+        # Bind click event later for navigating to line
+
 
     def add_placeholder_item(self, text):
         lbl = ctk.CTkLabel(self.file_list_frame, text=text, text_color="gray")
