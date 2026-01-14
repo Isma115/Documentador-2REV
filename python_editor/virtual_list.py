@@ -2,16 +2,16 @@ import customtkinter as ctk
 import tkinter as tk
 
 class VirtualList(ctk.CTkFrame):
-    def __init__(self, master, item_height=35, **kwargs):
+    def __init__(self, master, item_height=35, use_checkboxes=False, **kwargs):
         super().__init__(master, **kwargs)
         self.data = []
         self.item_height = item_height
+        self.use_checkboxes = use_checkboxes
+        self.selected_items = set() # Stores items (must be hashable or use IDs)
         
         # Color setup (match CTK theme roughly)
         self.bg_color = self._apply_appearance_mode(self._fg_color)
         
-        # Canvas for scrolling
-        # Scrollbar (Pack first to ensure it gets space)
         # Canvas for scrolling
         self.canvas = tk.Canvas(
             self, 
@@ -46,10 +46,25 @@ class VirtualList(ctk.CTkFrame):
         data: list of objects to render. 
         Each object should ideally have a string representation.
         """
+        # Clear existing widgets to force recreation with new content
+        for widget in self.visible_widgets.values():
+            widget.destroy()
+        self.visible_widgets.clear()
+        self.canvas.delete("all")
+        
         self.data = data
         self.total_height = len(data) * self.item_height
         self.canvas.configure(scrollregion=(0, 0, 0, self.total_height))
         self.refresh_view()
+
+    def get_selected_items(self):
+        return list(self.selected_items)
+
+    def toggle_selection(self, item):
+        if item in self.selected_items:
+            self.selected_items.remove(item)
+        else:
+            self.selected_items.add(item)
 
     def on_resize(self, event):
         self.refresh_view()
@@ -153,31 +168,36 @@ class VirtualList(ctk.CTkFrame):
                 
                 # Use CTkButton for the "Box" look - it handles borders/bg/text robustness better than Frame
                 # We disable hover effect if not desired, or keep it for interactivity
-                btn = ctk.CTkButton(
+                command = None
+                if self.use_checkboxes:
+                    command = lambda i=item: self.toggle_selection(i)
+
+                widget = ctk.CTkButton(
                     self.canvas,
                     text="", # Set in configure
                     height=item_actual_height,
                     corner_radius=6,
                     border_width=2,
                     anchor="w", # Left align text
-                    font=("Segoe UI", 12, "bold")
+                    font=("Segoe UI", 12, "bold"),
+                    command=command
                 )
                 
                 # Configure Content
-                self.configure_item_button(btn, item)
+                self.configure_item_widget(widget, item)
 
                 # Add to canvas
                 self.canvas.create_window(
                     x_pos, y_pos, 
-                    window=btn, 
+                    window=widget, 
                     anchor="nw", 
                     width=item_width, 
                     height=item_actual_height,
                     tags=f"row_{idx}"
                 )
-                self.visible_widgets[idx] = btn
+                self.visible_widgets[idx] = widget
 
-    def configure_item_button(self, btn, item):
+    def configure_item_widget(self, widget, item):
         display_text = str(item)
         
         # Default colors
@@ -185,8 +205,18 @@ class VirtualList(ctk.CTkFrame):
         text_color = "white"
         hover_color = "#333333" # Fallback
         
+        # Check selection state if mode is active
+        is_selected = False
+        if self.use_checkboxes:
+             is_selected = item in self.selected_items
+
         if hasattr(item, 'name'):
             display_text = f"  {item.name}" # Add indent for look
+            
+            # Add checkbox indicator
+            if self.use_checkboxes:
+                 prefix = "☑" if is_selected else "☐"
+                 display_text = f"  {prefix} {item.name}"
             
             if item.asset_type == 'Function':
                 fg_color = "#E3F2FD"
@@ -208,15 +238,24 @@ class VirtualList(ctk.CTkFrame):
                 fg_color = "#FCE4EC"
                 text_color = "#880E4F"
                 hover_color = "#F8BBD0"
+            elif item.asset_type == 'Compound':
+                fg_color = "#E0F2F1"   # Light Emerald/Teal
+                text_color = "#00695C" # Deep Emerald/Teal
+                hover_color = "#B2DFDB"
         
-        btn.configure(
+        border_color = text_color
+        # Optionally highlight border heavily if selected
+        if is_selected:
+            border_color = "#00E676" # Bright Green or use text_color
+
+        widget.configure(
             text=display_text,
             fg_color=fg_color,
             text_color=text_color,
-            border_color=text_color,
+            border_color=border_color,
             hover_color=hover_color
         )
         
-        # Bind scrolling to the button as well
-        btn.bind("<MouseWheel>", self.on_mousewheel)
+        # Bind scrolling to the widget
+        widget.bind("<MouseWheel>", self.on_mousewheel)
 

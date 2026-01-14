@@ -83,11 +83,12 @@ PATTERNS = {
 }
 
 class CodeAsset:
-    def __init__(self, name, asset_type, file_path, line_number):
+    def __init__(self, name, asset_type, file_path, line_number, children=None):
         self.name = name
         self.asset_type = asset_type
         self.file_path = file_path
         self.line_number = line_number
+        self.children = children if children is not None else []
 
     def __repr__(self):
         return f"[{self.asset_type}] {self.name} ({os.path.basename(self.file_path)})"
