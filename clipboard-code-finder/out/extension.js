@@ -221,8 +221,8 @@ async function navigateToResult(result) {
     vscode.window.showInformationMessage(`✓ Código encontrado en ${path.basename(result.uri.fsPath)}, línea ${result.startPosition.line + 1}`);
 }
 function normalizeCode(code) {
-    // Eliminar espacios en blanco y saltos de línea para comparación
-    return code.replace(/\s+/g, '').toLowerCase();
+    // Eliminar todo lo que no sea alfanumérico para comparación "fuzzy" agresiva
+    return code.replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
 function findRealPosition(fullText, searchText) {
     // Buscar línea por línea para encontrar coincidencia aproximada
@@ -286,6 +286,16 @@ class ClipboardFinderViewProvider {
         webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.command === 'findCode') {
                 await vscode.commands.executeCommand('clipboard-code-finder.findCode');
+            }
+        });
+        // Disparar búsqueda cada vez que la vista se hace visible
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                // Pequeño retardo para asegurar que VS Code procesa la visibilidad y el comando no se corta
+                setTimeout(() => {
+                    vscode.commands.executeCommand('clipboard-code-finder.findCode');
+                    vscode.commands.executeCommand('workbench.action.closeSidebar');
+                }, 200);
             }
         });
     }
@@ -377,7 +387,7 @@ class ClipboardFinderViewProvider {
     <div class="container">
         <div>
             <h3>🔍 Clipboard Code Finder</h3>
-            <p>Busca código copiado en tu portapapeles dentro del workspace actual.</p>
+            <p>Buscando automáticamente código del portapapeles...</p>
         </div>
 
         <button class="search-button" onclick="findCode()">
@@ -385,21 +395,16 @@ class ClipboardFinderViewProvider {
                 <circle cx="11" cy="11" r="8"/>
                 <path d="m21 21-4.35-4.35"/>
             </svg>
-            Buscar Código del Portapapeles
+            Reintentar Búsqueda
         </button>
 
         <div class="instructions">
             <strong>Instrucciones:</strong>
             <ol>
                 <li>Copia un fragmento de código (Ctrl+C)</li>
-                <li>Haz clic en el botón de arriba</li>
+                <li>Abre este panel o pulsa el botón de arriba</li>
                 <li>El código será encontrado y destacado</li>
             </ol>
-        </div>
-
-        <div class="shortcut">
-            También puedes usar: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd><br>
-            y buscar "Buscar Código del Portapapeles"
         </div>
     </div>
 
@@ -409,6 +414,11 @@ class ClipboardFinderViewProvider {
         function findCode() {
             vscode.postMessage({ command: 'findCode' });
         }
+
+        // Auto-iniciar búsqueda al cargar la vista
+        window.addEventListener('load', () => {
+             findCode();
+        });
     </script>
 </body>
 </html>`;
