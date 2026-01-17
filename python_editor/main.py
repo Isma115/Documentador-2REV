@@ -53,8 +53,9 @@ class CodeEditorApp(ctk.CTk):
         # --- Variables ---
         self.CONFIG_FILE = "config.json"
         self.current_project_path = None
+        self.editor_font_size = 14  # Default font size for zoom
         
-        # Load Settings
+        # Load Settings (may override font_size)
         self.load_settings()
 
         # --- Top Bar (Menu/Actions) ---
@@ -95,12 +96,19 @@ class CodeEditorApp(ctk.CTk):
         # Text Editor
         self.code_editor = ctk.CTkTextbox(
             self.editor_frame,
-            font=("Consolas", 14), # Monospaced font
+            font=("Consolas", self.editor_font_size), # Monospaced font
             corner_radius=0,
             activate_scrollbars=True
         )
         self.code_editor.pack(fill="both", expand=True)
         self.code_editor.insert("0.0", "# Welcome to Python Editor\n# Open a folder to start coding.")
+        
+        # Bind zoom shortcuts (Ctrl + Plus/Minus)
+        self.code_editor.bind("<Control-plus>", self.zoom_in)
+        self.code_editor.bind("<Control-minus>", self.zoom_out)
+        self.code_editor.bind("<Control-equal>", self.zoom_in)  # For keyboards where + is Shift+=
+        self.code_editor.bind("<Control-KP_Add>", self.zoom_in)  # Numpad +
+        self.code_editor.bind("<Control-KP_Subtract>", self.zoom_out)  # Numpad -
 
         # Initialize Syntax Highlighter
         self.syntax_highlighter = SyntaxHighlighter(self.code_editor)
@@ -199,18 +207,38 @@ class CodeEditorApp(ctk.CTk):
             # Use after to ensure UI is ready
             self.after(100, lambda: self.load_assets(self.current_project_path))
 
+    def zoom_in(self, event=None):
+        """Increase editor font size (zoom in)."""
+        if self.editor_font_size < 40:  # Max font size limit
+            self.editor_font_size += 2
+            self.code_editor.configure(font=("Consolas", self.editor_font_size))
+            self.save_settings()  # Persist zoom level
+        return "break"  # Prevent default behavior
+
+    def zoom_out(self, event=None):
+        """Decrease editor font size (zoom out)."""
+        if self.editor_font_size > 8:  # Min font size limit
+            self.editor_font_size -= 2
+            self.code_editor.configure(font=("Consolas", self.editor_font_size))
+            self.save_settings()  # Persist zoom level
+        return "break"  # Prevent default behavior
+
     def load_settings(self):
         try:
             if os.path.exists(self.CONFIG_FILE):
                 with open(self.CONFIG_FILE, "r") as f:
                     settings = json.load(f)
                     self.current_project_path = settings.get("last_directory")
+                    self.editor_font_size = settings.get("editor_font_size", 14)
         except Exception as e:
             print(f"Error loading settings: {e}")
 
     def save_settings(self):
         try:
-            settings = {"last_directory": self.current_project_path}
+            settings = {
+                "last_directory": self.current_project_path,
+                "editor_font_size": self.editor_font_size
+            }
             with open(self.CONFIG_FILE, "w") as f:
                 json.dump(settings, f)
         except Exception as e:
