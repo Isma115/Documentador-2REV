@@ -2,7 +2,7 @@
     "name": "clipboard-code-finder",
     "displayName": "Clipboard Code Finder",
     "description": "Busca código copiado en el portapapeles dentro del workspace y navega automáticamente al archivo que lo contenga",
-    "version": "1.0.3",
+    "version": "1.0.5",
     "publisher": "tu-nombre",
     "engines": {
         "vscode": "^1.85.0"
