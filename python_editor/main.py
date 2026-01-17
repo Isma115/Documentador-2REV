@@ -8,21 +8,48 @@ import asset_extractor
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
+class TreeNode:
+    """Wrapper for assets to display in tree with depth and expansion state."""
+    def __init__(self, asset, depth=0, is_expanded=False):
+        self.asset = asset
+        self.depth = depth
+        self.is_expanded = is_expanded
+        # Build display name with icons only (rectangle provides indentation)
+        if self._is_compound():
+            icon = "▼ " if is_expanded else "▶ "
+        else:
+            icon = "● "
+        self.name = f"{icon}{asset.name}" if hasattr(asset, 'name') else str(asset)
+        self.asset_type = getattr(asset, 'asset_type', 'default')
+    
+    def _is_compound(self):
+        return getattr(self.asset, 'asset_type', '') == 'Compound'
+    
+    def __repr__(self):
+        return self.name
+
 class CodeEditorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         # Window Setup
         self.title("Python Code Editor")
-        self.geometry("1100x700")
+        self.geometry("1200x700")
         
         # Configure Grid Layout
         # Column 0: Editor (Flexible)
-        # Column 1: Side Panel (Fixed width mostly, but we can use weight=0)
+        # Column 1: Sub-assets Tree Panel (hidden by default)
+        # Column 2: Side Panel (Assets list)
         self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=0, minsize=250)
-        self.grid_rowconfigure(0, weight=0) # Top bar (optional)
-        self.grid_rowconfigure(1, weight=1) # Main content
+        self.grid_columnconfigure(1, weight=0, minsize=0)  # Sub-assets panel (dynamic)
+        self.grid_columnconfigure(2, weight=0, minsize=250)
+        self.grid_rowconfigure(0, weight=0)  # Top bar
+        self.grid_rowconfigure(1, weight=1)  # Main content
+        
+        # Track current compound asset being viewed
+        self.current_compound_asset = None
+        self.navigation_stack = []  # Stack for recursive navigation
+        self.expanded_nodes = set()  # Track which nodes are expanded (by asset id)
 
         # --- Variables ---
         self.CONFIG_FILE = "config.json"
@@ -33,7 +60,7 @@ class CodeEditorApp(ctk.CTk):
 
         # --- Top Bar (Menu/Actions) ---
         self.top_bar = ctk.CTkFrame(self, height=40, corner_radius=0)
-        self.top_bar.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.top_bar.grid(row=0, column=0, columnspan=3, sticky="ew")
         
         self.load_btn = ctk.CTkButton(
             self.top_bar, 
@@ -76,9 +103,57 @@ class CodeEditorApp(ctk.CTk):
         self.code_editor.pack(fill="both", expand=True)
         self.code_editor.insert("0.0", "# Welcome to Python Editor\n# Open a folder to start coding.")
 
+        # --- Sub-assets Tree Panel (Middle - Hidden by default) ---
+        self.subassets_panel = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#1E1E1E")
+        # Initially hidden - will be shown when clicking compound asset
+        
+        # Sub-assets header
+        self.subassets_header_frame = ctk.CTkFrame(self.subassets_panel, fg_color="transparent")
+        self.subassets_header_frame.pack(fill="x", padx=5, pady=5)
+        
+        self.subassets_title = ctk.CTkLabel(
+            self.subassets_header_frame,
+            text="Sub-Assets",
+            font=("Segoe UI", 12, "bold"),
+            text_color="#00E676"
+        )
+        self.subassets_title.pack(side="left", padx=5)
+        
+        # Back button (hidden by default)
+        self.back_subassets_btn = ctk.CTkButton(
+            self.subassets_header_frame,
+            text="←",
+            width=25,
+            height=25,
+            command=self.navigate_back_subassets,
+            fg_color="#1565C0",
+            hover_color="#0D47A1"
+        )
+        # Initially hidden
+        
+        self.close_subassets_btn = ctk.CTkButton(
+            self.subassets_header_frame,
+            text="✕",
+            width=25,
+            height=25,
+            command=self.hide_subassets_panel,
+            fg_color="#B71C1C",
+            hover_color="#7F0000"
+        )
+        self.close_subassets_btn.pack(side="right", padx=5)
+        
+        # Sub-assets tree list
+        from virtual_list import VirtualList
+        self.subassets_list = VirtualList(
+            self.subassets_panel, 
+            item_height=35, 
+            command_click=self.on_subasset_click
+        )
+        self.subassets_list.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+        
         # --- Side Panel (Right) ---
         self.side_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
-        self.side_panel.grid(row=1, column=1, sticky="nsew")
+        self.side_panel.grid(row=1, column=2, sticky="nsew")
         
         # Header for the list
         self.list_header = ctk.CTkLabel(
@@ -110,7 +185,7 @@ class CodeEditorApp(ctk.CTk):
 
         # Virtual List for assets
         from virtual_list import VirtualList
-        self.file_list = VirtualList(self.side_panel, item_height=40)
+        self.file_list = VirtualList(self.side_panel, item_height=40, command_click=self.on_asset_click)
         self.file_list.pack(fill="both", expand=True, padx=5, pady=5)
         
         # Placeholder items
@@ -186,6 +261,182 @@ class CodeEditorApp(ctk.CTk):
         if hasattr(self, 'all_assets'):
             filter_text = self.search_entry.get()
             self.populate_asset_list(filter_text)
+
+    def on_asset_click(self, asset):
+        """Handle click on an asset in the list."""
+        if not hasattr(asset, 'name'):
+            return  # Not a valid asset
+        
+        # Check if it's a compound asset (user-created)
+        if getattr(asset, 'asset_type', '') == 'Compound':
+            self.show_subassets_panel(asset)
+        else:
+            self.show_asset_code(asset)
+    
+    def show_subassets_panel(self, compound_asset, push_to_stack=True):
+        """Show the sub-assets panel for a compound asset."""
+        # Push current asset to stack for back navigation
+        if push_to_stack and self.current_compound_asset is not None:
+            self.navigation_stack.append(self.current_compound_asset)
+        
+        self.current_compound_asset = compound_asset
+        
+        # Update title with compound asset name
+        self.subassets_title.configure(text=f"◆ {compound_asset.name}")
+        
+        # Show/hide back button based on stack
+        if self.navigation_stack:
+            self.back_subassets_btn.pack(side="left", padx=(5, 0))
+        else:
+            self.back_subassets_btn.pack_forget()
+        
+        # Show the panel
+        self.subassets_panel.grid(row=1, column=1, sticky="nsew", padx=(2, 2))
+        self.grid_columnconfigure(1, weight=0, minsize=220)
+        
+        # Build and populate the tree
+        self.refresh_tree_view()
+    
+    def refresh_tree_view(self):
+        """Rebuild the tree view based on current compound asset and expansion state."""
+        if not self.current_compound_asset:
+            return
+        
+        tree_nodes = self.build_tree_list(self.current_compound_asset, depth=0)
+        if tree_nodes:
+            self.subassets_list.set_data(tree_nodes)
+        else:
+            self.subassets_list.set_data(["No sub-assets found"])
+    
+    def build_tree_list(self, compound_asset, depth=0):
+        """Build a flat list of TreeNodes representing the expanded tree."""
+        nodes = []
+        children = getattr(compound_asset, 'children', [])
+        
+        for child in children:
+            is_compound = getattr(child, 'asset_type', '') == 'Compound'
+            is_expanded = is_compound and id(child) in self.expanded_nodes
+            node = TreeNode(child, depth, is_expanded)
+            nodes.append(node)
+            
+            # If this child is compound AND expanded, add its children recursively
+            if is_expanded:
+                child_nodes = self.build_tree_list(child, depth + 1)
+                nodes.extend(child_nodes)
+        
+        return nodes
+    
+    def toggle_node_expansion(self, asset):
+        """Toggle expansion state of a compound asset node."""
+        asset_id = id(asset)
+        if asset_id in self.expanded_nodes:
+            self.expanded_nodes.discard(asset_id)
+        else:
+            self.expanded_nodes.add(asset_id)
+        self.refresh_tree_view()
+    
+    def hide_subassets_panel(self):
+        """Hide the sub-assets panel and clear navigation."""
+        self.current_compound_asset = None
+        self.navigation_stack.clear()
+        self.expanded_nodes.clear()
+        self.back_subassets_btn.pack_forget()
+        self.subassets_panel.grid_forget()
+        self.grid_columnconfigure(1, weight=0, minsize=0)
+    
+    def navigate_back_subassets(self):
+        """Navigate back to the previous compound asset."""
+        if self.navigation_stack:
+            previous_asset = self.navigation_stack.pop()
+            self.show_subassets_panel(previous_asset, push_to_stack=False)
+    
+    def on_subasset_click(self, clicked_item):
+        """Handle click on a sub-asset in the tree."""
+        # Handle TreeNode wrapper
+        if isinstance(clicked_item, TreeNode):
+            asset = clicked_item.asset
+        else:
+            asset = clicked_item
+        
+        if not hasattr(asset, 'name'):
+            return
+        
+        # Check if this sub-asset is also a compound asset
+        if getattr(asset, 'asset_type', '') == 'Compound':
+            # Toggle expansion in-place
+            self.toggle_node_expansion(asset)
+        else:
+            self.show_asset_code(asset)
+    
+    def extract_asset_code(self, asset):
+        """Extract only the code of a specific asset from its file."""
+        if not hasattr(asset, 'file_path') or not asset.file_path:
+            return None
+        
+        if not os.path.exists(asset.file_path):
+            return None
+        
+        try:
+            with open(asset.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            
+            if not hasattr(asset, 'line_number') or asset.line_number <= 0:
+                return ''.join(lines)
+            
+            start_line = asset.line_number - 1  # 0-indexed
+            if start_line >= len(lines):
+                return None
+            
+            # Get the starting indentation level
+            first_line = lines[start_line]
+            base_indent = len(first_line) - len(first_line.lstrip())
+            
+            # Find the end of this asset (when indentation returns to base level or less)
+            end_line = start_line + 1
+            for i in range(start_line + 1, len(lines)):
+                line = lines[i]
+                stripped = line.strip()
+                
+                # Skip empty lines and comments
+                if not stripped or stripped.startswith('#'):
+                    end_line = i + 1
+                    continue
+                
+                current_indent = len(line) - len(line.lstrip())
+                
+                # If we return to base indentation or less, we've exited the block
+                if current_indent <= base_indent and stripped:
+                    break
+                
+                end_line = i + 1
+            
+            # Extract the code block
+            return ''.join(lines[start_line:end_line])
+            
+        except Exception as e:
+            return f"# Error extracting code: {e}"
+    
+    def show_asset_code(self, asset):
+        """Display only the code of an asset in the main editor."""
+        if not hasattr(asset, 'file_path') or not asset.file_path:
+            return
+        
+        # Extract only the asset's code
+        code = self.extract_asset_code(asset)
+        
+        if code is None:
+            self.code_editor.delete("0.0", "end")
+            self.code_editor.insert("0.0", f"# Could not load code for {asset.name}")
+            return
+        
+        # Clear editor and insert content
+        self.code_editor.delete("0.0", "end")
+        self.code_editor.insert("0.0", code)
+        
+        # Highlight the first line (definition)
+        self.code_editor.tag_remove("highlight", "0.0", "end")
+        self.code_editor.tag_add("highlight", "1.0", "1.end")
+        self.code_editor.tag_config("highlight", background="#3D5A80")
 
 
     def create_compound_asset_window(self):
@@ -312,7 +563,7 @@ class CodeEditorApp(ctk.CTk):
                     "name": name,
                     "asset_type": "Compound",
                     "documentation": documentation,
-                    "children": [{"name": a.name, "file_path": a.file_path, "line_number": a.line_number} for a in selected_assets]
+                    "children": [{"name": a.name, "file_path": a.file_path, "line_number": a.line_number, "asset_type": a.asset_type} for a in selected_assets]
                 }
                 
                 # Save JSON
@@ -357,14 +608,40 @@ class CodeEditorApp(ctk.CTk):
                     with open(json_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     
-                    # Reconstruct children as CodeAsset objects (simplified)
+                    # Reconstruct children as CodeAsset objects
                     children = []
                     for child_data in data.get("children", []):
+                        child_type = child_data.get("asset_type", "Reference")
+                        child_path = child_data.get("file_path", "")
+                        
+                        # Detect compound by .json extension (for legacy files without asset_type)
+                        if child_path.endswith(".json") and os.path.exists(child_path):
+                            child_type = "Compound"
+                        
+                        # Check if child is a compound asset - load its children
+                        child_children = []
+                        if child_type == "Compound" and child_path.endswith(".json") and os.path.exists(child_path):
+                            try:
+                                with open(child_path, "r", encoding="utf-8") as cf:
+                                    child_json = json.load(cf)
+                                # Recursively load nested children
+                                for nested_data in child_json.get("children", []):
+                                    nested = asset_extractor.CodeAsset(
+                                        name=nested_data.get("name", "Unknown"),
+                                        asset_type=nested_data.get("asset_type", "Reference"),
+                                        file_path=nested_data.get("file_path", ""),
+                                        line_number=nested_data.get("line_number", 0)
+                                    )
+                                    child_children.append(nested)
+                            except:
+                                pass
+                        
                         child = asset_extractor.CodeAsset(
                             name=child_data.get("name", "Unknown"),
-                            asset_type="Reference",
-                            file_path=child_data.get("file_path", ""),
-                            line_number=child_data.get("line_number", 0)
+                            asset_type=child_type,
+                            file_path=child_path,
+                            line_number=child_data.get("line_number", 0),
+                            children=child_children
                         )
                         children.append(child)
                     

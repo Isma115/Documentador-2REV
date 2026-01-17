@@ -1,0 +1,27 @@
+{
+  "name": "nose2",
+  "asset_type": "Compound",
+  "documentation": "",
+  "children": [
+    {
+      "name": "nose 1",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\activos\\nose 1.json",
+      "line_number": 0
+    },
+    {
+      "name": "get_language",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\asset_extractor.py",
+      "line_number": 97
+    },
+    {
+      "name": "CodeEditorApp",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\main.py",
+      "line_number": 11
+    },
+    {
+      "name": "scan_project_assets",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\asset_extractor.py",
+      "line_number": 126
+    }
+  ]
+}

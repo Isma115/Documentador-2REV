@@ -6,11 +6,12 @@ class VirtualList(ctk.CTkFrame):
     A virtual list that uses native canvas elements instead of embedded widgets.
     This eliminates clipping issues during scroll.
     """
-    def __init__(self, master, item_height=35, use_checkboxes=False, command_double_click=None, **kwargs):
+    def __init__(self, master, item_height=35, use_checkboxes=False, command_click=None, command_double_click=None, **kwargs):
         super().__init__(master, **kwargs)
         self.data = []
         self.item_height = item_height
         self.use_checkboxes = use_checkboxes
+        self.command_click = command_click
         self.command_double_click = command_double_click
         self.selected_items = set()
         self.total_height = 0
@@ -117,6 +118,8 @@ class VirtualList(ctk.CTkFrame):
             self.set_clicked_item(item)
             if self.use_checkboxes:
                 self.toggle_selection(item)
+            if self.command_click:
+                self.command_click(item)
             self._redraw()
 
     def _on_double_click(self, event):
@@ -206,11 +209,15 @@ class VirtualList(ctk.CTkFrame):
         for idx in range(start_idx, end_idx):
             item = self.data[idx]
             
-            # Calculate position
+            # Check if item has depth (for tree nodes)
+            item_depth = getattr(item, 'depth', 0) if hasattr(item, 'depth') else 0
+            depth_margin = item_depth * 25  # 25 pixels per depth level for better visibility
+            
+            # Calculate position with depth margin
             y_top = idx * self.item_height + 3
             y_bottom = y_top + item_actual_height
-            x_left = margin_left
-            x_right = x_left + item_width
+            x_left = margin_left + depth_margin
+            x_right = margin_left + item_width  # Keep right edge fixed
             
             # Get colors
             is_hovered = (idx == self.hover_index)
