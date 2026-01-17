@@ -235,7 +235,7 @@ class CodeEditorApp(ctk.CTk):
         left_search.grid(row=0, column=0, sticky="e", pady=(0, 5))
 
         from virtual_list import VirtualList
-        available_list = VirtualList(lists_frame, item_height=35)
+        available_list = VirtualList(lists_frame, item_height=35, command_double_click=lambda item: add_selected(item))
         available_list.grid(row=1, column=0, sticky="nsew", padx=(0, 5))
         
         # --- Center Buttons ---
@@ -245,7 +245,7 @@ class CodeEditorApp(ctk.CTk):
         # --- Right Panel: Selected Assets ---
         ctk.CTkLabel(lists_frame, text="Selected Assets", font=("Arial", 11, "bold")).grid(row=0, column=2, sticky="w", pady=(0, 5))
         
-        selected_list = VirtualList(lists_frame, item_height=35)
+        selected_list = VirtualList(lists_frame, item_height=35, command_double_click=lambda item: remove_selected(item))
         selected_list.grid(row=1, column=2, sticky="nsew", padx=(5, 0))
         
         # Selected items storage
@@ -259,15 +259,17 @@ class CodeEditorApp(ctk.CTk):
         def refresh_selected():
             selected_list.set_data(selected_assets[:])
         
-        def add_selected():
-            item = available_list.get_clicked_item()
+        def add_selected(item=None):
+            if item is None:
+                item = available_list.get_clicked_item()
             if item and item not in selected_assets:
                 selected_assets.append(item)
                 refresh_available()
                 refresh_selected()
         
-        def remove_selected():
-            item = selected_list.get_clicked_item()
+        def remove_selected(item=None):
+            if item is None:
+                item = selected_list.get_clicked_item()
             if item and item in selected_assets:
                 selected_assets.remove(item)
                 refresh_available()
