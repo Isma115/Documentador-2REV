@@ -4,6 +4,7 @@ from tkinter import filedialog
 import os
 import json
 import asset_extractor
+from syntax_highlighter import SyntaxHighlighter
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -14,16 +15,13 @@ class TreeNode:
         self.asset = asset
         self.depth = depth
         self.is_expanded = is_expanded
-        # Build display name with icons only (rectangle provides indentation)
-        if self._is_compound():
-            icon = "▼ " if is_expanded else "▶ "
-        else:
-            icon = "● "
-        self.name = f"{icon}{asset.name}" if hasattr(asset, 'name') else str(asset)
+        self.is_compound = getattr(asset, 'asset_type', '') == 'Compound'
+        # Use original asset name without modification for consistent display
+        self.name = asset.name if hasattr(asset, 'name') else str(asset)
         self.asset_type = getattr(asset, 'asset_type', 'default')
-    
-    def _is_compound(self):
-        return getattr(self.asset, 'asset_type', '') == 'Compound'
+        # Copy other relevant properties from asset for consistent rendering
+        self.file_path = getattr(asset, 'file_path', '')
+        self.line_number = getattr(asset, 'line_number', 0)
     
     def __repr__(self):
         return self.name
@@ -34,7 +32,8 @@ class CodeEditorApp(ctk.CTk):
 
         # Window Setup
         self.title("Python Code Editor")
-        self.geometry("1200x700")
+        # Maximize window after UI is ready
+        self.after(10, lambda: self.state('zoomed'))
         
         # Configure Grid Layout
         # Column 0: Editor (Flexible)
@@ -103,8 +102,11 @@ class CodeEditorApp(ctk.CTk):
         self.code_editor.pack(fill="both", expand=True)
         self.code_editor.insert("0.0", "# Welcome to Python Editor\n# Open a folder to start coding.")
 
+        # Initialize Syntax Highlighter
+        self.syntax_highlighter = SyntaxHighlighter(self.code_editor)
+
         # --- Sub-assets Tree Panel (Middle - Hidden by default) ---
-        self.subassets_panel = ctk.CTkFrame(self, width=200, corner_radius=0, fg_color="#1E1E1E")
+        self.subassets_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
         # Initially hidden - will be shown when clicking compound asset
         
         # Sub-assets header
@@ -146,10 +148,10 @@ class CodeEditorApp(ctk.CTk):
         from virtual_list import VirtualList
         self.subassets_list = VirtualList(
             self.subassets_panel, 
-            item_height=35, 
+            item_height=40, 
             command_click=self.on_subasset_click
         )
-        self.subassets_list.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+        self.subassets_list.pack(fill="both", expand=True, padx=5, pady=5)
         
         # --- Side Panel (Right) ---
         self.side_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
@@ -292,7 +294,7 @@ class CodeEditorApp(ctk.CTk):
         
         # Show the panel
         self.subassets_panel.grid(row=1, column=1, sticky="nsew", padx=(2, 2))
-        self.grid_columnconfigure(1, weight=0, minsize=220)
+        self.grid_columnconfigure(1, weight=0, minsize=250)
         
         # Build and populate the tree
         self.refresh_tree_view()
@@ -437,6 +439,9 @@ class CodeEditorApp(ctk.CTk):
         self.code_editor.tag_remove("highlight", "0.0", "end")
         self.code_editor.tag_add("highlight", "1.0", "1.end")
         self.code_editor.tag_config("highlight", background="#3D5A80")
+        
+        # Apply syntax highlighting
+        self.syntax_highlighter.highlight(code, asset.file_path)
 
 
     def create_compound_asset_window(self):
