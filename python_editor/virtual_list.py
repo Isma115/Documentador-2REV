@@ -59,6 +59,14 @@ class VirtualList(ctk.CTkFrame):
 
     def get_selected_items(self):
         return list(self.selected_items)
+    
+    def get_clicked_item(self):
+        """Return the last clicked item (for add/remove in dual-list mode)."""
+        return getattr(self, 'last_clicked_item', None)
+    
+    def set_clicked_item(self, item):
+        """Set the last clicked item."""
+        self.last_clicked_item = item
 
     def toggle_selection(self, item):
         if item in self.selected_items:
@@ -168,9 +176,11 @@ class VirtualList(ctk.CTkFrame):
                 
                 # Use CTkButton for the "Box" look - it handles borders/bg/text robustness better than Frame
                 # We disable hover effect if not desired, or keep it for interactivity
-                command = None
-                if self.use_checkboxes:
-                    command = lambda i=item: self.toggle_selection(i)
+                def on_item_click(i=item):
+                    self.set_clicked_item(i)
+                    if self.use_checkboxes:
+                        self.toggle_selection(i)
+                        self.refresh_view()
 
                 widget = ctk.CTkButton(
                     self.canvas,
@@ -180,7 +190,7 @@ class VirtualList(ctk.CTkFrame):
                     border_width=2,
                     anchor="w", # Left align text
                     font=("Segoe UI", 12, "bold"),
-                    command=command
+                    command=on_item_click
                 )
                 
                 # Configure Content
