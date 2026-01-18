@@ -81,6 +81,18 @@ class CodeEditorApp(ctk.CTk):
             hover_color="#004D40"
         )
         self.create_btn.pack(side="left", padx=5, pady=5)
+        
+        # AI Prompt Copy Button
+        self.ai_prompt_btn = ctk.CTkButton(
+            self.top_bar,
+            text="📋 AI Prompt",
+            command=self.copy_as_ai_prompt,
+            width=100,
+            height=30,
+            fg_color="#6A1B9A",
+            hover_color="#4A148C"
+        )
+        self.ai_prompt_btn.pack(side="left", padx=5, pady=5)
 
         self.path_label = ctk.CTkLabel(
             self.top_bar, 
@@ -471,6 +483,284 @@ class CodeEditorApp(ctk.CTk):
         # Apply syntax highlighting
         self.syntax_highlighter.highlight(code, asset.file_path)
 
+    def get_current_asset_extension(self):
+        """Obtiene la extensión del archivo del activo actualmente mostrado."""
+        # Intentar detectar la extensión desde el código mostrado o usar 'python' por defecto
+        code = self.code_editor.get("0.0", "end-1c")
+        if not code.strip():
+            return "python"
+        
+        # Detectar por indicadores comunes en el código
+        if "def " in code or "class " in code or "import " in code:
+            return "python"
+        elif "function " in code or "const " in code or "let " in code or "var " in code:
+            return "javascript"
+        elif "public class" in code or "private " in code or "void " in code:
+            return "java"
+        elif "#include" in code or "int main" in code:
+            return "cpp"
+        elif "<html" in code.lower() or "<!doctype" in code.lower():
+            return "html"
+        elif "{" in code and "}" in code and ":" in code and ";" not in code:
+            return "json"
+        
+        return "python"  # Default
+    
+    def get_full_asset_code(self):
+        """Obtiene el código completo del editor (activo actualmente visible)."""
+        return self.code_editor.get("0.0", "end-1c")
+    
+    def extract_all_compound_code(self, compound_asset, depth=0):
+        """Extrae recursivamente todo el código de un activo compuesto y sus hijos."""
+        code_blocks = []
+        indent = "  " * depth
+        
+        # Añadir encabezado del activo compuesto
+        asset_name = compound_asset.name if hasattr(compound_asset, 'name') else str(compound_asset)
+        code_blocks.append(f"\n{'#' * (depth + 2)} {asset_name}")
+        
+        # Añadir documentación si existe
+        doc = getattr(compound_asset, 'documentation', '')
+        if doc:
+            code_blocks.append(f"\n> Documentación: {doc}")
+        
+        children = getattr(compound_asset, 'children', [])
+        
+        for child in children:
+            child_name = child.name if hasattr(child, 'name') else str(child)
+            child_type = getattr(child, 'asset_type', 'Unknown')
+            
+            if child_type == 'Compound':
+                # Recursivamente extraer código de sub-compuestos
+                child_code = self.extract_all_compound_code(child, depth + 1)
+                code_blocks.append(child_code)
+            else:
+                # Extraer código del activo simple
+                asset_code = self.extract_asset_code(child)
+                
+                if asset_code:
+                    # Detectar extensión del archivo
+                    file_path = getattr(child, 'file_path', '')
+                    ext = os.path.splitext(file_path)[1].lstrip('.') if file_path else 'python'
+                    if not ext:
+                        ext = 'python'
+                    
+                    code_blocks.append(f"\n### {child_name} ({child_type})")
+                    code_blocks.append(f"```{ext}\n{asset_code}\n```")
+                else:
+                    code_blocks.append(f"\n### {child_name} ({child_type})")
+                    code_blocks.append(f"_[No se pudo extraer el código de este activo]_")
+        
+        return "\n".join(code_blocks)
+    
+    def get_compound_asset_code(self):
+        """Obtiene todo el código del activo compuesto actualmente seleccionado."""
+        if not self.current_compound_asset:
+            return None
+        
+        return self.extract_all_compound_code(self.current_compound_asset)
+    
+    def copy_as_ai_prompt(self):
+        """Muestra popup para describir la mejora y copia el código como prompt de IA."""
+        # Verificar si hay un activo compuesto activo (con el panel de sub-activos visible)
+        is_compound_mode = self.current_compound_asset is not None
+        
+        if is_compound_mode:
+            # Extraer código de todo el árbol de activos
+            code = self.get_compound_asset_code()
+            compound_name = self.current_compound_asset.name if hasattr(self.current_compound_asset, 'name') else "Activo Compuesto"
+        else:
+            # Usar el código del editor actual
+            code = self.get_full_asset_code()
+            compound_name = None
+        
+        if not code or not code.strip():
+            # Mostrar mensaje de error si no hay código
+            error_window = ctk.CTkToplevel(self)
+            error_window.title("Error")
+            error_window.geometry("350x120")
+            error_window.grab_set()
+            
+            # Centrar ventana
+            self.update_idletasks()
+            x = self.winfo_x() + (self.winfo_width() // 2) - 175
+            y = self.winfo_y() + (self.winfo_height() // 2) - 60
+            error_window.geometry(f"350x120+{x}+{y}")
+            
+            error_msg = "No hay activo compuesto seleccionado.\nPrimero selecciona un activo compuesto de la lista." if is_compound_mode else "No hay código en el editor."
+            
+            ctk.CTkLabel(
+                error_window, 
+                text=error_msg,
+                font=("Arial", 12)
+            ).pack(pady=20)
+            
+            ctk.CTkButton(
+                error_window,
+                text="Aceptar",
+                command=error_window.destroy,
+                width=80
+            ).pack()
+            return
+        
+        # Crear popup para descripción
+        popup = ctk.CTkToplevel(self)
+        popup.title("Generar Prompt de IA")
+        
+        # Geometría y centrado
+        width = 500
+        height = 400
+        
+        self.update_idletasks()
+        main_x = self.winfo_x()
+        main_y = self.winfo_y()
+        main_width = self.winfo_width()
+        main_height = self.winfo_height()
+        
+        x = main_x + (main_width // 2) - (width // 2)
+        y = main_y + (main_height // 2) - (height // 2)
+        
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+        popup.grab_set()
+        popup.focus_set()
+        
+        # Indicador del modo
+        if is_compound_mode:
+            mode_label = ctk.CTkLabel(
+                popup,
+                text=f"📦 Activo Compuesto: {compound_name}",
+                font=("Arial", 11),
+                text_color="#00E676"
+            )
+            mode_label.pack(pady=(10, 0), padx=20, anchor="w")
+        
+        # Título descriptivo
+        ctk.CTkLabel(
+            popup,
+            text="Describe la mejora o corrección que necesitas:",
+            font=("Arial", 13, "bold")
+        ).pack(pady=(10, 10), padx=20, anchor="w")
+        
+        # Campo de texto para descripción
+        description_textbox = ctk.CTkTextbox(popup, height=150)
+        description_textbox.pack(fill="x", padx=20, pady=(0, 10))
+        description_textbox.focus_set()
+        
+        # Info text
+        info_msg = "El prompt se copiará con TODO el código del activo compuesto\ny sus sub-activos. La IA devolverá solo los fragmentos modificados." if is_compound_mode else "El prompt se copiará al portapapeles con el código completo\ny la instrucción de devolver solo los fragmentos modificados."
+        
+        ctk.CTkLabel(
+            popup,
+            text=info_msg,
+            font=("Arial", 10),
+            text_color="gray"
+        ).pack(pady=(0, 15))
+        
+        # Frame para botones
+        btn_frame = ctk.CTkFrame(popup, fg_color="transparent")
+        btn_frame.pack(pady=10)
+        
+        def accept():
+            description = description_textbox.get("0.0", "end-1c").strip()
+            if not description:
+                # Resaltar el campo si está vacío
+                description_textbox.configure(border_color="#B71C1C")
+                return
+            
+            # Formatear el prompt según el modo
+            if is_compound_mode:
+                prompt = f"""Necesito que analices y modifiques el siguiente conjunto de código según las instrucciones proporcionadas.
+
+## Activo Compuesto: {compound_name}
+
+El siguiente contenido incluye múltiples archivos/funciones/clases que forman parte de este activo:
+
+{code}
+
+## Descripción de la mejora/corrección solicitada:
+{description}
+
+## Instrucciones importantes:
+- Devuelve ÚNICAMENTE los fragmentos de código que han sido modificados
+- Para cada fragmento modificado, indica claramente:
+  1. El nombre del activo/archivo afectado
+  2. La ubicación (número de línea o nombre de función/clase afectada)
+  3. El código original (antes)
+  4. El código modificado (después)
+- NO devuelvas el código completo, solo las partes que cambian
+- Si hay múltiples modificaciones en diferentes archivos, sepáralas claramente por archivo"""
+            else:
+                extension = self.get_current_asset_extension()
+                prompt = f"""Necesito que analices y modifiques el siguiente código según las instrucciones proporcionadas.
+
+## Código actual:
+```{extension}
+{code}
+```
+
+## Descripción de la mejora/corrección solicitada:
+{description}
+
+## Instrucciones importantes:
+- Devuelve ÚNICAMENTE los fragmentos de código que han sido modificados
+- Para cada fragmento modificado, indica claramente:
+  1. La ubicación (número de línea o nombre de función/clase afectada)
+  2. El código original (antes)
+  3. El código modificado (después)
+- NO devuelvas el código completo, solo las partes que cambian
+- Si hay múltiples modificaciones, sepáralas claramente"""
+            
+            # Copiar al portapapeles
+            self.clipboard_clear()
+            self.clipboard_append(prompt)
+            self.update()  # Necesario para que el portapapeles persista
+            
+            popup.destroy()
+            
+            # Mostrar confirmación breve
+            confirm = ctk.CTkToplevel(self)
+            confirm.title("")
+            confirm.geometry("250x80")
+            confirm.overrideredirect(True)  # Sin barra de título
+            
+            # Centrar
+            cx = main_x + (main_width // 2) - 125
+            cy = main_y + (main_height // 2) - 40
+            confirm.geometry(f"250x80+{cx}+{cy}")
+            
+            confirm_frame = ctk.CTkFrame(confirm, fg_color="#1B5E20", corner_radius=10)
+            confirm_frame.pack(fill="both", expand=True, padx=2, pady=2)
+            
+            ctk.CTkLabel(
+                confirm_frame,
+                text="✓ Prompt copiado al portapapeles",
+                font=("Arial", 12, "bold"),
+                text_color="white"
+            ).pack(expand=True)
+            
+            # Auto-cerrar después de 1.5 segundos
+            confirm.after(1500, confirm.destroy)
+        
+        def cancel():
+            popup.destroy()
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Aceptar",
+            command=accept,
+            width=100,
+            fg_color="#00695C",
+            hover_color="#004D40"
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancelar",
+            command=cancel,
+            width=100,
+            fg_color="#757575",
+            hover_color="#616161"
+        ).pack(side="left", padx=10)
 
     def create_compound_asset_window(self):
         if not hasattr(self, 'all_assets') or not self.all_assets:
