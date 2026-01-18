@@ -42,7 +42,7 @@ class CodeEditorApp(ctk.CTk):
         # Column 2: Side Panel (Assets list)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=0, minsize=0)  # Sub-assets panel (dynamic)
-        self.grid_columnconfigure(2, weight=0, minsize=250)
+        self.grid_columnconfigure(2, weight=0)  # Removed side panel
         self.grid_rowconfigure(0, weight=0)  # Top bar
         self.grid_rowconfigure(1, weight=1)  # Main content
         
@@ -114,13 +114,30 @@ class CodeEditorApp(ctk.CTk):
         )
         self.docs_folder_btn.pack(side="left", padx=5, pady=8)
 
-        self.path_label = ctk.CTkLabel(
-            self.top_bar, 
-            text="No Project Opened",
-            text_color="gray",
+        # Search Bar (Replaces Path Label)
+        self.search_entry = ctk.CTkEntry(
+            self.top_bar,
+            placeholder_text="🔍 Search code assets...",
+            width=300,
+            height=35,
             font=("Segoe UI", 14)
         )
-        self.path_label.pack(side="left", padx=10)
+        self.search_entry.pack(side="left", padx=10, pady=8)
+        self.search_entry.bind("<KeyRelease>", self.filter_file_list)
+        self.search_entry.bind("<FocusOut>", self.on_search_focus_out)
+        self.search_entry.bind("<FocusIn>", self.filter_file_list) # Show list if has text
+
+        # Floating Search Results Frame (Initially Hidden)
+        self.search_results_frame = ctk.CTkFrame(self, corner_radius=5, fg_color="#2B2B2B", border_width=1, border_color="#3D3D3D")
+        # Will be placed using .place() relative to search_entry
+        
+        from virtual_list import VirtualList
+        self.search_results_list = VirtualList(
+            self.search_results_frame, 
+            item_height=35,
+            command_click=self.on_search_result_click
+        )
+        self.search_results_list.pack(fill="both", expand=True, padx=2, pady=2)
 
         # --- Main Editor Area (Left) ---
         self.editor_frame = ctk.CTkFrame(self, corner_radius=0)
@@ -259,50 +276,15 @@ class CodeEditorApp(ctk.CTk):
         self.subassets_list.pack(fill="both", expand=True, padx=8, pady=8)
         
         # --- Side Panel (Right) ---
-        self.side_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
-        self.side_panel.grid(row=1, column=2, sticky="nsew")
+        # Side Panel Removed
+        # self.grid_columnconfigure(2, weight=0) # Configured above
         
-        # Header for the list
-        self.list_header = ctk.CTkLabel(
-            self.side_panel, 
-            text="Code Assets", 
-            font=("Segoe UI", 16, "bold")
-        )
-        self.list_header.pack(pady=(12, 8), padx=12, anchor="w")
-
-        # Search Bar
-        self.search_entry = ctk.CTkEntry(
-            self.side_panel,
-            placeholder_text="Search files...",
-            height=40,
-            font=("Segoe UI", 14)
-        )
-        self.search_entry.pack(fill="x", padx=12, pady=(0, 12))
-        self.search_entry.bind("<KeyRelease>", self.filter_file_list)
-
-        # Sort Options
-        self.sort_var = ctk.StringVar(value="Name")
-        self.sort_menu = ctk.CTkOptionMenu(
-            self.side_panel,
-            values=["Name", "Type"],
-            command=self.on_sort_change,
-            height=35,
-            width=120,
-            font=("Segoe UI", 13)
-        )
-        self.sort_menu.pack(pady=(0, 8), padx=12, anchor="e")
-
-        # Virtual List for assets
-        from virtual_list import VirtualList
-        self.file_list = VirtualList(self.side_panel, item_height=50, command_click=self.on_asset_click)
-        self.file_list.pack(fill="both", expand=True, padx=8, pady=8)
-        
-        # Placeholder items
-        self.file_list.set_data(["No files to show"])
+        # Side panel contents removed
+        # self.file_list etc removed
 
         # Auto-load project if exists
         if self.current_project_path and os.path.exists(self.current_project_path):
-            self.path_label.configure(text=f"{self.current_project_path}")
+             # self.path_label.configure(text=f"{self.current_project_path}") # Removed label
             # Use after to ensure UI is ready
             self.after(100, lambda: self.load_assets(self.current_project_path))
 
@@ -493,7 +475,7 @@ class CodeEditorApp(ctk.CTk):
         folder_selected = filedialog.askdirectory(initialdir=self.current_project_path)
         if folder_selected:
             self.current_project_path = folder_selected
-            self.path_label.configure(text=f"{folder_selected}")
+            # self.path_label.configure(text=f"{folder_selected}") # Removed label
             self.load_assets(folder_selected)
             self.save_settings()
 
@@ -501,36 +483,124 @@ class CodeEditorApp(ctk.CTk):
         # import asset_extractor # Imported globally now
         self.all_assets = asset_extractor.scan_project_assets(folder_path)
         self.load_custom_assets(folder_path)  # Load saved compound assets
-        self.populate_asset_list()
+        # self.populate_asset_list() # No side panel list to populate initially
+
+    def on_search_focus_out(self, event):
+        # Delay hiding to allow click event to register
+        self.after(200, self.hide_search_results)
+
+    def hide_search_results(self):
+        self.search_results_frame.place_forget()
 
     def populate_asset_list(self, filter_text=""):
+        # This function name is kept for compatibility but logic changes
+        if not filter_text:
+            self.hide_search_results()
+            return
+            
         if not hasattr(self, 'all_assets') or not self.all_assets:
-            self.file_list.set_data(["No code assets found"])
             return
 
-        filtered_assets = []
-        for asset in self.all_assets:
-            if filter_text.lower() in asset.name.lower():
-                filtered_assets.append(asset)
+        import difflib # Import locally to avoid global clutter if preferred, or could move to top
+
+        filter_lower = filter_text.lower()
+        scored_assets = []
         
-        # Apply Sorting
-        sort_by = self.sort_var.get()
-        filtered_assets = self.sort_assets(filtered_assets, sort_by)
+        for asset in self.all_assets:
+            name_lower = asset.name.lower()
+            
+            # Combined Scoring Strategy
+            score = 0
+            
+            # 1. Exact/Substring Match Boost
+            if filter_lower in name_lower:
+                # Base score for substring match is high (0.8 - 1.0)
+                # Shorter names relative to query get higher score (closer to exact match)
+                len_ratio = len(filter_lower) / len(name_lower)
+                score = 0.8 + (0.2 * len_ratio)
+            
+            # 2. Fuzzy Match (for typos or "close" matches) using difflib
+            # calculating ratio is expensive if many assets, but typically fine for <10k components
+            fuzzy_ratio = difflib.SequenceMatcher(None, filter_lower, name_lower).ratio()
+            
+            # Take the better of the two scores? Or combine them?
+            # Usually fuzzy search is useful when exact fails.
+            # Let's say: score is max(substring_score, fuzzy_ratio)
+            # But we can penalize fuzzy_ratio slightly to prefer substring matches if close
+            
+            final_score = max(score, fuzzy_ratio)
+            
+            # Threshold to filter out noise
+            if final_score > 0.3: # 30% similarity
+                scored_assets.append((final_score, asset))
+        
+        # Sort descending by score
+        scored_assets.sort(key=lambda x: x[0], reverse=True)
 
-        if not filtered_assets:
-            self.file_list.set_data(["No matches found"])
+        # Take top 7 high scoring assets
+        display_assets = [item[1] for item in scored_assets[:7]]
+
+        if not display_assets:
+            self.hide_search_results()
         else:
-            self.file_list.set_data(filtered_assets)
+            self.search_results_list.set_data(display_assets)
+            self.show_search_results()
 
-    def sort_assets(self, assets, sort_by):
-        if sort_by == "Name":
-            return sorted(assets, key=lambda x: x.name.lower())
-        elif sort_by == "Type":
-            return sorted(assets, key=lambda x: (x.asset_type, x.name.lower()))
-        return assets
+    def show_search_results(self):
+        try:
+            # Use rootx to get absolute visual position, then relative to window
+            # This handles any nesting or pack/grid offsets correctly
+            entry_x = self.search_entry.winfo_rootx() - self.winfo_rootx()
+            entry_y = self.search_entry.winfo_rooty() - self.winfo_rooty()
+            
+            height_entry = self.search_entry.winfo_height()
+            
+            # Position list below entry
+            y = entry_y + height_entry + 5
+            
+            # Requested: "Much more to the left"
+            # We start at the entry's left edge, then subtract a large offset
+            # But we must ensure the width matches the entry or is fixed?
+            # User earlier said "simplificada... y más pequeña".
+            # If we move it left, maybe we should keep width?
+            width = self.search_entry.winfo_width()
+            
+            # Shift left by 250 pixels (aggressive shift)
+            x = entry_x - 175
+            
+            # Validation: don't go off-screen left
+            if x < 10: x = 10
+                
+            # Adjust height based on number of items (max 7 * 35 height) + padding
+            num_items = len(self.search_results_list.data)
+            height = (num_items * 35) + 10
+            
+            # Use .configure for sizing (fix for CustomTkinter crash)
+            self.search_results_frame.configure(width=width, height=height)
+            self.search_results_frame.place(x=x, y=y)
+            self.search_results_frame.lift() # Bring to front
+            
+            
+        except Exception as e:
+            print(f"Error showing search results: {e}")
 
-    def on_sort_change(self, choice):
-        self.filter_file_list()
+
+    def on_search_result_click(self, asset):
+        self.on_asset_click(asset)
+        self.hide_search_results()
+        self.search_entry.delete(0, 'end') # Optional: clear search after selection logic? Or keep it?
+        # User request: "el buscador, se coloque" -> sounds like persistent search. 
+        # But "lista va a pasar a ser una lista... que va a desplegar" sounds like dropdown.
+        # Clearing search seems appropriate for a "jump to" action.
+        self.search_entry.delete(0, 'end') 
+
+    # Removed sort methods as they are no longer used in side panel
+    # def sort_assets(self, assets, sort_by): ...
+    # def on_sort_change(self, choice): ...
+
+
+    # Sort methods removed as they are no longer needed
+
 
     def filter_file_list(self, event=None):
         if hasattr(self, 'all_assets'):
