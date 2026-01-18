@@ -54,6 +54,9 @@ class CodeEditorApp(ctk.CTk):
         self.CONFIG_FILE = "config.json"
         self.current_project_path = None
         self.editor_font_size = 14  # Default font size for zoom
+        self.docs_folder_path = None  # Carpeta donde se guardan las documentaciones
+        self.current_asset = None  # Activo actualmente seleccionado
+        self.view_mode = "code"  # "code" o "docs" - modo de visualización actual
         
         # Load Settings (may override font_size)
         self.load_settings()
@@ -93,6 +96,18 @@ class CodeEditorApp(ctk.CTk):
             hover_color="#4A148C"
         )
         self.ai_prompt_btn.pack(side="left", padx=5, pady=5)
+        
+        # Docs Folder Button
+        self.docs_folder_btn = ctk.CTkButton(
+            self.top_bar,
+            text="📁 Docs Folder",
+            command=self.select_docs_folder,
+            width=100,
+            height=30,
+            fg_color="#1565C0",
+            hover_color="#0D47A1"
+        )
+        self.docs_folder_btn.pack(side="left", padx=5, pady=5)
 
         self.path_label = ctk.CTkLabel(
             self.top_bar, 
@@ -105,22 +120,86 @@ class CodeEditorApp(ctk.CTk):
         self.editor_frame = ctk.CTkFrame(self, corner_radius=0)
         self.editor_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=0)
         
-        # Text Editor
+        # --- Tab Bar for Code/Docs toggle ---
+        self.tab_bar = ctk.CTkFrame(self.editor_frame, height=35, fg_color="#1E1E1E")
+        self.tab_bar.pack(fill="x", pady=(0, 2))
+        
+        self.code_tab_btn = ctk.CTkButton(
+            self.tab_bar,
+            text="💻 Código",
+            command=lambda: self.switch_view_mode("code"),
+            width=100,
+            height=28,
+            fg_color="#2D2D2D",
+            hover_color="#3D3D3D",
+            corner_radius=5
+        )
+        self.code_tab_btn.pack(side="left", padx=5, pady=3)
+        
+        self.docs_tab_btn = ctk.CTkButton(
+            self.tab_bar,
+            text="📝 Documentación",
+            command=lambda: self.switch_view_mode("docs"),
+            width=120,
+            height=28,
+            fg_color="#1E1E1E",
+            hover_color="#3D3D3D",
+            corner_radius=5
+        )
+        self.docs_tab_btn.pack(side="left", padx=2, pady=3)
+        
+        # Save docs button (only visible in docs mode)
+        self.save_docs_btn = ctk.CTkButton(
+            self.tab_bar,
+            text="💾 Guardar",
+            command=self.save_current_documentation,
+            width=80,
+            height=28,
+            fg_color="#00695C",
+            hover_color="#004D40",
+            corner_radius=5
+        )
+        # Initially hidden
+        
+        # Asset name label
+        self.asset_name_label = ctk.CTkLabel(
+            self.tab_bar,
+            text="",
+            font=("Segoe UI", 11),
+            text_color="#888888"
+        )
+        self.asset_name_label.pack(side="right", padx=10, pady=3)
+        
+        # --- Code Editor (Read-Only) ---
         self.code_editor = ctk.CTkTextbox(
             self.editor_frame,
-            font=("Consolas", self.editor_font_size), # Monospaced font
+            font=("Consolas", self.editor_font_size),
+            corner_radius=0,
+            activate_scrollbars=True,
+            state="disabled"  # SOLO LECTURA
+        )
+        self.code_editor.pack(fill="both", expand=True)
+        
+        # --- Documentation Editor (Hidden by default) ---
+        self.docs_editor = ctk.CTkTextbox(
+            self.editor_frame,
+            font=("Segoe UI", 12),
             corner_radius=0,
             activate_scrollbars=True
         )
-        self.code_editor.pack(fill="both", expand=True)
-        self.code_editor.insert("0.0", "# Welcome to Python Editor\n# Open a folder to start coding.")
+        # Initially hidden - will be shown when switching to docs mode
+        
+        # Set initial welcome message
+        self.code_editor.configure(state="normal")
+        self.code_editor.insert("0.0", "# Bienvenido al Visor de Código\n# Abre una carpeta para comenzar.\n# El código es solo lectura.")
+        self.code_editor.configure(state="disabled")
         
         # Bind zoom shortcuts (Ctrl + Plus/Minus)
         self.code_editor.bind("<Control-plus>", self.zoom_in)
         self.code_editor.bind("<Control-minus>", self.zoom_out)
-        self.code_editor.bind("<Control-equal>", self.zoom_in)  # For keyboards where + is Shift+=
-        self.code_editor.bind("<Control-KP_Add>", self.zoom_in)  # Numpad +
-        self.code_editor.bind("<Control-KP_Subtract>", self.zoom_out)  # Numpad -
+        self.code_editor.bind("<Control-equal>", self.zoom_in)
+        self.code_editor.bind("<Control-KP_Add>", self.zoom_in)
+        self.code_editor.bind("<Control-KP_Subtract>", self.zoom_out)
 
         # Initialize Syntax Highlighter
         self.syntax_highlighter = SyntaxHighlighter(self.code_editor)
@@ -242,6 +321,7 @@ class CodeEditorApp(ctk.CTk):
                     settings = json.load(f)
                     self.current_project_path = settings.get("last_directory")
                     self.editor_font_size = settings.get("editor_font_size", 14)
+                    self.docs_folder_path = settings.get("docs_folder_path")
         except Exception as e:
             print(f"Error loading settings: {e}")
 
@@ -249,12 +329,154 @@ class CodeEditorApp(ctk.CTk):
         try:
             settings = {
                 "last_directory": self.current_project_path,
-                "editor_font_size": self.editor_font_size
+                "editor_font_size": self.editor_font_size,
+                "docs_folder_path": self.docs_folder_path
             }
             with open(self.CONFIG_FILE, "w") as f:
                 json.dump(settings, f)
         except Exception as e:
             print(f"Error saving settings: {e}")
+
+    def select_docs_folder(self):
+        """Permite al usuario seleccionar la carpeta de documentación."""
+        folder_selected = filedialog.askdirectory(
+            initialdir=self.docs_folder_path or self.current_project_path,
+            title="Seleccionar Carpeta de Documentación"
+        )
+        if folder_selected:
+            self.docs_folder_path = folder_selected
+            self.save_settings()
+            # Mostrar confirmación
+            self.show_notification(f"Carpeta de docs: {os.path.basename(folder_selected)}")
+    
+    def show_notification(self, message, color="#1B5E20"):
+        """Muestra una notificación temporal."""
+        notif = ctk.CTkToplevel(self)
+        notif.overrideredirect(True)
+        
+        self.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 150
+        y = self.winfo_y() + 60
+        notif.geometry(f"300x40+{x}+{y}")
+        
+        frame = ctk.CTkFrame(notif, fg_color=color, corner_radius=8)
+        frame.pack(fill="both", expand=True, padx=2, pady=2)
+        
+        ctk.CTkLabel(frame, text=message, text_color="white", font=("Arial", 11)).pack(expand=True)
+        
+        notif.after(2000, notif.destroy)
+    
+    def get_asset_doc_id(self, asset):
+        """Genera un ID único para el archivo de documentación de un activo."""
+        import hashlib
+        # Crear un identificador basado en nombre, ruta y línea
+        identifier = f"{asset.name}_{getattr(asset, 'file_path', '')}_{getattr(asset, 'line_number', 0)}"
+        hash_short = hashlib.md5(identifier.encode()).hexdigest()[:8]
+        # Limpiar nombre para usar en archivo
+        safe_name = "".join(c if c.isalnum() or c in '-_' else '_' for c in asset.name)
+        return f"{safe_name}_{hash_short}"
+    
+    def get_asset_doc_path(self, asset):
+        """Obtiene la ruta completa del archivo de documentación para un activo."""
+        if not self.docs_folder_path:
+            return None
+        doc_id = self.get_asset_doc_id(asset)
+        return os.path.join(self.docs_folder_path, f"{doc_id}.md")
+    
+    def load_asset_documentation(self, asset):
+        """Carga la documentación de un activo desde el archivo."""
+        doc_path = self.get_asset_doc_path(asset)
+        if not doc_path or not os.path.exists(doc_path):
+            return ""
+        try:
+            with open(doc_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            print(f"Error loading documentation: {e}")
+            return ""
+    
+    def save_asset_documentation(self, asset, content):
+        """Guarda la documentación de un activo en el archivo."""
+        if not self.docs_folder_path:
+            self.show_notification("Primero selecciona una carpeta de documentación", "#B71C1C")
+            return False
+        
+        # Crear carpeta si no existe
+        try:
+            os.makedirs(self.docs_folder_path, exist_ok=True)
+        except Exception as e:
+            print(f"Error creating docs folder: {e}")
+            self.show_notification(f"Error creando carpeta: {e}", "#B71C1C")
+            return False
+        
+        doc_path = self.get_asset_doc_path(asset)
+        if not doc_path:
+            self.show_notification("No se pudo generar ruta de documentación", "#B71C1C")
+            return False
+            
+        try:
+            with open(doc_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return True
+        except Exception as e:
+            print(f"Error saving documentation to {doc_path}: {e}")
+            self.show_notification(f"Error: {str(e)[:30]}", "#B71C1C")
+            return False
+    
+    def save_current_documentation(self):
+        """Guarda la documentación del activo actualmente seleccionado."""
+        if not self.current_asset:
+            self.show_notification("No hay activo seleccionado", "#B71C1C")
+            return
+        
+        content = self.docs_editor.get("0.0", "end-1c")
+        if self.save_asset_documentation(self.current_asset, content):
+            self.show_notification("✓ Documentación guardada")
+        else:
+            self.show_notification("Error al guardar", "#B71C1C")
+    
+    def refresh_documentation_view(self):
+        """Actualiza la vista de documentación con el activo actual."""
+        if not self.current_asset:
+            self.docs_editor.delete("0.0", "end")
+            self.docs_editor.insert("0.0", "# Sin activo seleccionado\n\nSelecciona un activo de código para ver/editar su documentación.")
+            return
+        
+        doc_content = self.load_asset_documentation(self.current_asset)
+        self.docs_editor.delete("0.0", "end")
+        if doc_content:
+            self.docs_editor.insert("0.0", doc_content)
+        else:
+            # Plantilla inicial
+            template = f"# {self.current_asset.name}\n\n## Descripción\n\n[Escribe aquí la documentación de este activo]\n\n## Notas\n\n"
+            self.docs_editor.insert("0.0", template)
+    
+    def switch_view_mode(self, mode):
+        """Cambia entre modo código y modo documentación."""
+        if mode == self.view_mode:
+            return
+        
+        self.view_mode = mode
+        
+        if mode == "code":
+            # Mostrar código, ocultar documentación
+            self.docs_editor.pack_forget()
+            self.code_editor.pack(fill="both", expand=True)
+            self.save_docs_btn.pack_forget()
+            # Actualizar estilos de pestañas
+            self.code_tab_btn.configure(fg_color="#2D2D2D")
+            self.docs_tab_btn.configure(fg_color="#1E1E1E")
+        else:
+            # Mostrar documentación, ocultar código
+            self.code_editor.pack_forget()
+            self.docs_editor.pack(fill="both", expand=True)
+            self.save_docs_btn.pack(side="left", padx=10, pady=3)
+            # Actualizar estilos de pestañas
+            self.code_tab_btn.configure(fg_color="#1E1E1E")
+            self.docs_tab_btn.configure(fg_color="#2D2D2D")
+            
+            # Cargar documentación del activo actual
+            self.refresh_documentation_view()
 
     def load_project(self):
         folder_selected = filedialog.askdirectory(initialdir=self.current_project_path)
@@ -309,9 +531,16 @@ class CodeEditorApp(ctk.CTk):
         if not hasattr(asset, 'name'):
             return  # Not a valid asset
         
+        # Siempre actualizar el activo actual (para documentación)
+        self.current_asset = asset
+        self.asset_name_label.configure(text=f"📄 {asset.name}")
+        
         # Check if it's a compound asset (user-created)
         if getattr(asset, 'asset_type', '') == 'Compound':
             self.show_subassets_panel(asset)
+            # Si estamos en modo docs, actualizar la documentación
+            if self.view_mode == "docs":
+                self.refresh_documentation_view()
         else:
             self.show_asset_code(asset)
     
@@ -459,29 +688,35 @@ class CodeEditorApp(ctk.CTk):
             return f"# Error extracting code: {e}"
     
     def show_asset_code(self, asset):
-        """Display only the code of an asset in the main editor."""
+        """Display only the code of an asset in the main editor (read-only)."""
         if not hasattr(asset, 'file_path') or not asset.file_path:
             return
         
-        # Extract only the asset's code
+        # Actualizar el activo actual
+        self.current_asset = asset
+        self.asset_name_label.configure(text=f"📄 {asset.name}")
+        
+        # Extract only the asset's code (siempre lo extraemos para tenerlo listo)
         code = self.extract_asset_code(asset)
         
-        if code is None:
-            self.code_editor.delete("0.0", "end")
-            self.code_editor.insert("0.0", f"# Could not load code for {asset.name}")
-            return
-        
-        # Clear editor and insert content
+        # Actualizar el editor de código (aunque esté oculto)
+        self.code_editor.configure(state="normal")
         self.code_editor.delete("0.0", "end")
-        self.code_editor.insert("0.0", code)
+        if code is None:
+            self.code_editor.insert("0.0", f"# Could not load code for {asset.name}")
+        else:
+            self.code_editor.insert("0.0", code)
+            # Highlight the first line (definition)
+            self.code_editor.tag_remove("highlight", "0.0", "end")
+            self.code_editor.tag_add("highlight", "1.0", "1.end")
+            self.code_editor.tag_config("highlight", background="#3D5A80")
+            # Apply syntax highlighting
+            self.syntax_highlighter.highlight(code, asset.file_path)
+        self.code_editor.configure(state="disabled")
         
-        # Highlight the first line (definition)
-        self.code_editor.tag_remove("highlight", "0.0", "end")
-        self.code_editor.tag_add("highlight", "1.0", "1.end")
-        self.code_editor.tag_config("highlight", background="#3D5A80")
-        
-        # Apply syntax highlighting
-        self.syntax_highlighter.highlight(code, asset.file_path)
+        # Si estamos en modo documentación, actualizar también la documentación
+        if self.view_mode == "docs":
+            self.refresh_documentation_view()
 
     def get_current_asset_extension(self):
         """Obtiene la extensión del archivo del activo actualmente mostrado."""
