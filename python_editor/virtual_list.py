@@ -6,7 +6,7 @@ class VirtualList(ctk.CTkFrame):
     A virtual list that uses native canvas elements instead of embedded widgets.
     This eliminates clipping issues during scroll.
     """
-    def __init__(self, master, item_height=35, use_checkboxes=False, command_click=None, command_double_click=None, **kwargs):
+    def __init__(self, master, item_height=50, use_checkboxes=False, command_click=None, command_double_click=None, **kwargs):
         super().__init__(master, **kwargs)
         self.data = []
         self.item_height = item_height
@@ -200,18 +200,18 @@ class VirtualList(ctk.CTkFrame):
         end_idx = min(len(self.data), int(scroll_bottom // self.item_height) + 1)
         
         # Dimensions
-        margin_left = 10
-        margin_right = 15
+        margin_left = 12
+        margin_right = 18
         item_width = canvas_width - margin_left - margin_right
-        item_actual_height = self.item_height - 6
-        corner_radius = 6
+        item_actual_height = self.item_height - 8
+        corner_radius = 8
         
         for idx in range(start_idx, end_idx):
             item = self.data[idx]
             
             # Check if item has depth (for tree nodes)
             item_depth = getattr(item, 'depth', 0) if hasattr(item, 'depth') else 0
-            depth_margin = item_depth * 25  # 25 pixels per depth level for better visibility
+            depth_margin = item_depth * 30  # 30 pixels per depth level for better visibility
             
             # Calculate position with depth margin
             y_top = idx * self.item_height + 3
@@ -234,11 +234,11 @@ class VirtualList(ctk.CTkFrame):
             display_text = self._get_display_text(item, is_selected)
             text_y = (y_top + y_bottom) / 2
             self.canvas.create_text(
-                x_left + 10, text_y,
+                x_left + 12, text_y,
                 text=display_text,
                 anchor="w",
                 fill=text_color,
-                font=("Segoe UI", 11, "bold")
+                font=("Segoe UI", 14, "bold")
             )
 
     def _draw_rounded_rect(self, x1, y1, x2, y2, radius, fill, outline):

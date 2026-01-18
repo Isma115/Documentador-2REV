@@ -5,6 +5,7 @@ import os
 import json
 import asset_extractor
 from syntax_highlighter import SyntaxHighlighter
+from html_editor import HTMLDocEditor
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -62,99 +63,107 @@ class CodeEditorApp(ctk.CTk):
         self.load_settings()
 
         # --- Top Bar (Menu/Actions) ---
-        self.top_bar = ctk.CTkFrame(self, height=40, corner_radius=0)
+        self.top_bar = ctk.CTkFrame(self, height=55, corner_radius=0)
         self.top_bar.grid(row=0, column=0, columnspan=3, sticky="ew")
         
         self.load_btn = ctk.CTkButton(
             self.top_bar, 
             text="Open Folder", 
             command=self.load_project,
-            width=100,
-            height=30
+            width=140,
+            height=40,
+            font=("Segoe UI", 14, "bold")
         )
-        self.load_btn.pack(side="left", padx=10, pady=5)
+        self.load_btn.pack(side="left", padx=10, pady=8)
         
         self.create_btn = ctk.CTkButton(
             self.top_bar,
             text="Create Compound",
             command=self.create_compound_asset_window,
-            width=120,
-            height=30,
+            width=170,
+            height=40,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#00695C", 
             hover_color="#004D40"
         )
-        self.create_btn.pack(side="left", padx=5, pady=5)
+        self.create_btn.pack(side="left", padx=5, pady=8)
         
         # AI Prompt Copy Button
         self.ai_prompt_btn = ctk.CTkButton(
             self.top_bar,
             text="📋 AI Prompt",
             command=self.copy_as_ai_prompt,
-            width=100,
-            height=30,
+            width=140,
+            height=40,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#6A1B9A",
             hover_color="#4A148C"
         )
-        self.ai_prompt_btn.pack(side="left", padx=5, pady=5)
+        self.ai_prompt_btn.pack(side="left", padx=5, pady=8)
         
         # Docs Folder Button
         self.docs_folder_btn = ctk.CTkButton(
             self.top_bar,
             text="📁 Docs Folder",
             command=self.select_docs_folder,
-            width=100,
-            height=30,
+            width=150,
+            height=40,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#1565C0",
             hover_color="#0D47A1"
         )
-        self.docs_folder_btn.pack(side="left", padx=5, pady=5)
+        self.docs_folder_btn.pack(side="left", padx=5, pady=8)
 
         self.path_label = ctk.CTkLabel(
             self.top_bar, 
             text="No Project Opened",
-            text_color="gray"
+            text_color="gray",
+            font=("Segoe UI", 14)
         )
-        self.path_label.pack(side="left", padx=5)
+        self.path_label.pack(side="left", padx=10)
 
         # --- Main Editor Area (Left) ---
         self.editor_frame = ctk.CTkFrame(self, corner_radius=0)
         self.editor_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=0)
         
         # --- Tab Bar for Code/Docs toggle ---
-        self.tab_bar = ctk.CTkFrame(self.editor_frame, height=35, fg_color="#1E1E1E")
+        self.tab_bar = ctk.CTkFrame(self.editor_frame, height=50, fg_color="#1E1E1E")
         self.tab_bar.pack(fill="x", pady=(0, 2))
         
         self.code_tab_btn = ctk.CTkButton(
             self.tab_bar,
             text="💻 Código",
             command=lambda: self.switch_view_mode("code"),
-            width=100,
-            height=28,
+            width=130,
+            height=38,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#2D2D2D",
             hover_color="#3D3D3D",
             corner_radius=5
         )
-        self.code_tab_btn.pack(side="left", padx=5, pady=3)
+        self.code_tab_btn.pack(side="left", padx=5, pady=6)
         
         self.docs_tab_btn = ctk.CTkButton(
             self.tab_bar,
             text="📝 Documentación",
             command=lambda: self.switch_view_mode("docs"),
-            width=120,
-            height=28,
+            width=160,
+            height=38,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#1E1E1E",
             hover_color="#3D3D3D",
             corner_radius=5
         )
-        self.docs_tab_btn.pack(side="left", padx=2, pady=3)
+        self.docs_tab_btn.pack(side="left", padx=2, pady=6)
         
         # Save docs button (only visible in docs mode)
         self.save_docs_btn = ctk.CTkButton(
             self.tab_bar,
             text="💾 Guardar",
             command=self.save_current_documentation,
-            width=80,
-            height=28,
+            width=120,
+            height=38,
+            font=("Segoe UI", 14, "bold"),
             fg_color="#00695C",
             hover_color="#004D40",
             corner_radius=5
@@ -165,10 +174,10 @@ class CodeEditorApp(ctk.CTk):
         self.asset_name_label = ctk.CTkLabel(
             self.tab_bar,
             text="",
-            font=("Segoe UI", 11),
+            font=("Segoe UI", 14),
             text_color="#888888"
         )
-        self.asset_name_label.pack(side="right", padx=10, pady=3)
+        self.asset_name_label.pack(side="right", padx=10, pady=6)
         
         # --- Code Editor (Read-Only) ---
         self.code_editor = ctk.CTkTextbox(
@@ -180,13 +189,8 @@ class CodeEditorApp(ctk.CTk):
         )
         self.code_editor.pack(fill="both", expand=True)
         
-        # --- Documentation Editor (Hidden by default) ---
-        self.docs_editor = ctk.CTkTextbox(
-            self.editor_frame,
-            font=("Segoe UI", 12),
-            corner_radius=0,
-            activate_scrollbars=True
-        )
+        # --- Documentation Editor (Hidden by default) - Using HTML Editor ---
+        self.docs_editor = HTMLDocEditor(self.editor_frame)
         # Initially hidden - will be shown when switching to docs mode
         
         # Set initial welcome message
@@ -215,17 +219,18 @@ class CodeEditorApp(ctk.CTk):
         self.subassets_title = ctk.CTkLabel(
             self.subassets_header_frame,
             text="Sub-Assets",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 15, "bold"),
             text_color="#00E676"
         )
-        self.subassets_title.pack(side="left", padx=5)
+        self.subassets_title.pack(side="left", padx=8)
         
         # Back button (hidden by default)
         self.back_subassets_btn = ctk.CTkButton(
             self.subassets_header_frame,
             text="←",
-            width=25,
-            height=25,
+            width=35,
+            height=35,
+            font=("Segoe UI", 16, "bold"),
             command=self.navigate_back_subassets,
             fg_color="#1565C0",
             hover_color="#0D47A1"
@@ -235,22 +240,23 @@ class CodeEditorApp(ctk.CTk):
         self.close_subassets_btn = ctk.CTkButton(
             self.subassets_header_frame,
             text="✕",
-            width=25,
-            height=25,
+            width=35,
+            height=35,
+            font=("Segoe UI", 16, "bold"),
             command=self.hide_subassets_panel,
             fg_color="#B71C1C",
             hover_color="#7F0000"
         )
-        self.close_subassets_btn.pack(side="right", padx=5)
+        self.close_subassets_btn.pack(side="right", padx=8)
         
         # Sub-assets tree list
         from virtual_list import VirtualList
         self.subassets_list = VirtualList(
             self.subassets_panel, 
-            item_height=40, 
+            item_height=50, 
             command_click=self.on_subasset_click
         )
-        self.subassets_list.pack(fill="both", expand=True, padx=5, pady=5)
+        self.subassets_list.pack(fill="both", expand=True, padx=8, pady=8)
         
         # --- Side Panel (Right) ---
         self.side_panel = ctk.CTkFrame(self, width=250, corner_radius=0)
@@ -260,17 +266,18 @@ class CodeEditorApp(ctk.CTk):
         self.list_header = ctk.CTkLabel(
             self.side_panel, 
             text="Code Assets", 
-            font=("Segoe UI", 13, "bold")
+            font=("Segoe UI", 16, "bold")
         )
-        self.list_header.pack(pady=(10, 5), padx=10, anchor="w")
+        self.list_header.pack(pady=(12, 8), padx=12, anchor="w")
 
         # Search Bar
         self.search_entry = ctk.CTkEntry(
             self.side_panel,
             placeholder_text="Search files...",
-            height=30
+            height=40,
+            font=("Segoe UI", 14)
         )
-        self.search_entry.pack(fill="x", padx=10, pady=(0, 10))
+        self.search_entry.pack(fill="x", padx=12, pady=(0, 12))
         self.search_entry.bind("<KeyRelease>", self.filter_file_list)
 
         # Sort Options
@@ -279,15 +286,16 @@ class CodeEditorApp(ctk.CTk):
             self.side_panel,
             values=["Name", "Type"],
             command=self.on_sort_change,
-            height=25,
-            width=100
+            height=35,
+            width=120,
+            font=("Segoe UI", 13)
         )
-        self.sort_menu.pack(pady=(0, 5), padx=10, anchor="e")
+        self.sort_menu.pack(pady=(0, 8), padx=12, anchor="e")
 
         # Virtual List for assets
         from virtual_list import VirtualList
-        self.file_list = VirtualList(self.side_panel, item_height=40, command_click=self.on_asset_click)
-        self.file_list.pack(fill="both", expand=True, padx=5, pady=5)
+        self.file_list = VirtualList(self.side_panel, item_height=50, command_click=self.on_asset_click)
+        self.file_list.pack(fill="both", expand=True, padx=8, pady=8)
         
         # Placeholder items
         self.file_list.set_data(["No files to show"])
@@ -429,7 +437,8 @@ class CodeEditorApp(ctk.CTk):
             self.show_notification("No hay activo seleccionado", "#B71C1C")
             return
         
-        content = self.docs_editor.get("0.0", "end-1c")
+        # Obtener HTML del editor
+        content = self.docs_editor.get_html()
         if self.save_asset_documentation(self.current_asset, content):
             self.show_notification("✓ Documentación guardada")
         else:
@@ -438,18 +447,20 @@ class CodeEditorApp(ctk.CTk):
     def refresh_documentation_view(self):
         """Actualiza la vista de documentación con el activo actual."""
         if not self.current_asset:
-            self.docs_editor.delete("0.0", "end")
-            self.docs_editor.insert("0.0", "# Sin activo seleccionado\n\nSelecciona un activo de código para ver/editar su documentación.")
+            self.docs_editor.set_content("Sin activo seleccionado\n\nSelecciona un activo de código para ver/editar su documentación.")
             return
         
         doc_content = self.load_asset_documentation(self.current_asset)
-        self.docs_editor.delete("0.0", "end")
         if doc_content:
-            self.docs_editor.insert("0.0", doc_content)
+            # Si es HTML, cargarlo con load_html
+            if doc_content.strip().startswith("<!DOCTYPE") or doc_content.strip().startswith("<html"):
+                self.docs_editor.load_html(doc_content)
+            else:
+                self.docs_editor.set_content(doc_content)
         else:
             # Plantilla inicial
-            template = f"# {self.current_asset.name}\n\n## Descripción\n\n[Escribe aquí la documentación de este activo]\n\n## Notas\n\n"
-            self.docs_editor.insert("0.0", template)
+            template = f"{self.current_asset.name}\n\nDescripción\n\nEscribe aquí la documentación de este activo.\n\nNotas\n\n"
+            self.docs_editor.set_content(template)
     
     def switch_view_mode(self, mode):
         """Cambia entre modo código y modo documentación."""
@@ -1025,9 +1036,9 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         name_frame = ctk.CTkFrame(window, fg_color="transparent")
         name_frame.pack(fill="x", padx=20, pady=(10, 5))
         
-        ctk.CTkLabel(name_frame, text="Asset Name:", font=("Arial", 12, "bold")).pack(side="left")
-        name_entry = ctk.CTkEntry(name_frame, width=300)
-        name_entry.pack(side="left", padx=10)
+        ctk.CTkLabel(name_frame, text="Asset Name:", font=("Segoe UI", 15, "bold")).pack(side="left")
+        name_entry = ctk.CTkEntry(name_frame, width=350, height=40, font=("Segoe UI", 14))
+        name_entry.pack(side="left", padx=15)
         
         # --- Lists Container ---
         lists_frame = ctk.CTkFrame(window, fg_color="transparent")
@@ -1038,24 +1049,24 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         lists_frame.grid_rowconfigure(1, weight=1)
         
         # --- Left Panel: Available Assets ---
-        ctk.CTkLabel(lists_frame, text="Available Assets", font=("Arial", 11, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 5))
+        ctk.CTkLabel(lists_frame, text="Available Assets", font=("Segoe UI", 14, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
         
-        left_search = ctk.CTkEntry(lists_frame, placeholder_text="Search...", height=28)
-        left_search.grid(row=0, column=0, sticky="e", pady=(0, 5))
+        left_search = ctk.CTkEntry(lists_frame, placeholder_text="Search...", height=38, font=("Segoe UI", 13))
+        left_search.grid(row=0, column=0, sticky="e", pady=(0, 8))
 
         from virtual_list import VirtualList
-        available_list = VirtualList(lists_frame, item_height=35, command_double_click=lambda item: add_selected(item))
-        available_list.grid(row=1, column=0, sticky="nsew", padx=(0, 5))
+        available_list = VirtualList(lists_frame, item_height=50, command_double_click=lambda item: add_selected(item))
+        available_list.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
         
         # --- Center Buttons ---
         btn_frame = ctk.CTkFrame(lists_frame, fg_color="transparent", width=60)
         btn_frame.grid(row=1, column=1, padx=10)
         
         # --- Right Panel: Selected Assets ---
-        ctk.CTkLabel(lists_frame, text="Selected Assets", font=("Arial", 11, "bold")).grid(row=0, column=2, sticky="w", pady=(0, 5))
+        ctk.CTkLabel(lists_frame, text="Selected Assets", font=("Segoe UI", 14, "bold")).grid(row=0, column=2, sticky="w", pady=(0, 8))
         
-        selected_list = VirtualList(lists_frame, item_height=35, command_double_click=lambda item: remove_selected(item))
-        selected_list.grid(row=1, column=2, sticky="nsew", padx=(5, 0))
+        selected_list = VirtualList(lists_frame, item_height=50, command_double_click=lambda item: remove_selected(item))
+        selected_list.grid(row=1, column=2, sticky="nsew", padx=(8, 0))
         
         # Selected items storage
         selected_assets = []
@@ -1084,11 +1095,11 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
                 refresh_available()
                 refresh_selected()
         
-        add_btn = ctk.CTkButton(btn_frame, text="→", width=40, command=add_selected, fg_color="#00695C", hover_color="#004D40")
-        add_btn.pack(pady=5)
+        add_btn = ctk.CTkButton(btn_frame, text="→", width=50, height=45, font=("Segoe UI", 18, "bold"), command=add_selected, fg_color="#00695C", hover_color="#004D40")
+        add_btn.pack(pady=8)
         
-        remove_btn = ctk.CTkButton(btn_frame, text="←", width=40, command=remove_selected, fg_color="#B71C1C", hover_color="#7F0000")
-        remove_btn.pack(pady=5)
+        remove_btn = ctk.CTkButton(btn_frame, text="←", width=50, height=45, font=("Segoe UI", 18, "bold"), command=remove_selected, fg_color="#B71C1C", hover_color="#7F0000")
+        remove_btn.pack(pady=8)
         
         left_search.bind("<KeyRelease>", lambda e: refresh_available())
         
@@ -1097,11 +1108,11 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         refresh_selected()
         
         # --- Documentation ---
-        doc_label = ctk.CTkLabel(window, text="Documentation:", font=("Arial", 12, "bold"))
-        doc_label.pack(anchor="w", padx=20, pady=(10, 5))
+        doc_label = ctk.CTkLabel(window, text="Documentation:", font=("Segoe UI", 15, "bold"))
+        doc_label.pack(anchor="w", padx=20, pady=(10, 8))
         
-        doc_textbox = ctk.CTkTextbox(window, height=120)
-        doc_textbox.pack(fill="x", padx=20, pady=(0, 10))
+        doc_textbox = ctk.CTkTextbox(window, height=140, font=("Segoe UI", 14))
+        doc_textbox.pack(fill="x", padx=20, pady=(0, 15))
         
         # --- Create Button ---
         def create():
@@ -1149,8 +1160,9 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
             command=create,
             fg_color="#00695C",
             hover_color="#004D40",
-            height=35
-        ).pack(pady=15)
+            height=45,
+            font=("Segoe UI", 15, "bold")
+        ).pack(pady=18)
 
 
     def load_custom_assets(self, folder_path):
