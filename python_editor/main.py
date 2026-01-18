@@ -787,10 +787,8 @@ class CodeEditorApp(ctk.CTk):
             self.code_editor.insert("0.0", f"# Could not load code for {asset.name}")
         else:
             self.code_editor.insert("0.0", code)
-            # Highlight the first line (definition)
-            self.code_editor.tag_remove("highlight", "0.0", "end")
-            self.code_editor.tag_add("highlight", "1.0", "1.end")
-            self.code_editor.tag_config("highlight", background="#3D5A80")
+        # Highlight removed as per user request
+        
             # Apply syntax highlighting
             self.syntax_highlighter.highlight(code, asset.file_path)
         self.code_editor.configure(state="disabled")
@@ -1177,9 +1175,7 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         refresh_available()
         refresh_selected()
         
-        # --- Documentation ---
-        doc_label = ctk.CTkLabel(window, text="Documentation:", font=("Segoe UI", 15, "bold"))
-        doc_label.pack(anchor="w", padx=20, pady=(10, 8))
+        # --- Documentation (Support Only) ---
         
         doc_textbox = ctk.CTkTextbox(window, height=140, font=("Segoe UI", 14))
         doc_textbox.pack(fill="x", padx=20, pady=(0, 15))
