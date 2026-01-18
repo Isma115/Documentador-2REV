@@ -32,7 +32,7 @@ class CodeEditorApp(ctk.CTk):
         super().__init__()
 
         # Window Setup
-        self.title("Python Code Editor")
+        self.title("Editor de Código Python")
         # Maximize window after UI is ready
         self.after(10, lambda: self.state('zoomed'))
         
@@ -68,7 +68,7 @@ class CodeEditorApp(ctk.CTk):
         
         self.load_btn = ctk.CTkButton(
             self.top_bar, 
-            text="Open Folder", 
+            text="Abrir Carpeta", 
             command=self.load_project,
             width=140,
             height=40,
@@ -78,7 +78,7 @@ class CodeEditorApp(ctk.CTk):
         
         self.create_btn = ctk.CTkButton(
             self.top_bar,
-            text="Create Compound",
+            text="Crear Componente",
             command=self.create_compound_asset_window,
             width=170,
             height=40,
@@ -91,7 +91,7 @@ class CodeEditorApp(ctk.CTk):
         # AI Prompt Copy Button
         self.ai_prompt_btn = ctk.CTkButton(
             self.top_bar,
-            text="📋 AI Prompt",
+            text="📋 Prompt IA",
             command=self.copy_as_ai_prompt,
             width=140,
             height=40,
@@ -104,7 +104,7 @@ class CodeEditorApp(ctk.CTk):
         # Docs Folder Button
         self.docs_folder_btn = ctk.CTkButton(
             self.top_bar,
-            text="📁 Docs Folder",
+            text="📁 Carpeta Doc.",
             command=self.select_docs_folder,
             width=150,
             height=40,
@@ -117,7 +117,7 @@ class CodeEditorApp(ctk.CTk):
         # Search Bar (Replaces Path Label)
         self.search_entry = ctk.CTkEntry(
             self.top_bar,
-            placeholder_text="🔍 Search code assets...",
+            placeholder_text="🔍 Buscar activos...",
             width=300,
             height=35,
             font=("Segoe UI", 14)
@@ -235,7 +235,7 @@ class CodeEditorApp(ctk.CTk):
         
         self.subassets_title = ctk.CTkLabel(
             self.subassets_header_frame,
-            text="Sub-Assets",
+            text="Sub-Activos",
             font=("Segoe UI", 15, "bold"),
             text_color="#00E676"
         )
@@ -658,7 +658,7 @@ class CodeEditorApp(ctk.CTk):
         if tree_nodes:
             self.subassets_list.set_data(tree_nodes)
         else:
-            self.subassets_list.set_data(["No sub-assets found"])
+            self.subassets_list.set_data(["No se encontraron sub-activos"])
     
     def build_tree_list(self, compound_asset, depth=0):
         """Build a flat list of TreeNodes representing the expanded tree."""
@@ -784,7 +784,7 @@ class CodeEditorApp(ctk.CTk):
         self.code_editor.configure(state="normal")
         self.code_editor.delete("0.0", "end")
         if code is None:
-            self.code_editor.insert("0.0", f"# Could not load code for {asset.name}")
+            self.code_editor.insert("0.0", f"# No se pudo cargar el código de {asset.name}")
         else:
             self.code_editor.insert("0.0", code)
         # Highlight removed as per user request
@@ -1081,7 +1081,7 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
             return
 
         window = ctk.CTkToplevel(self)
-        window.title("Create Compound Asset")
+        window.title("Crear Componente")
         
         # Geometry and Centering
         width = 900
@@ -1104,7 +1104,7 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         name_frame = ctk.CTkFrame(window, fg_color="transparent")
         name_frame.pack(fill="x", padx=20, pady=(10, 5))
         
-        ctk.CTkLabel(name_frame, text="Asset Name:", font=("Segoe UI", 15, "bold")).pack(side="left")
+        ctk.CTkLabel(name_frame, text="Nombre del Componente:", font=("Segoe UI", 15, "bold")).pack(side="left")
         name_entry = ctk.CTkEntry(name_frame, width=350, height=40, font=("Segoe UI", 14))
         name_entry.pack(side="left", padx=15)
         
@@ -1117,9 +1117,9 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         lists_frame.grid_rowconfigure(1, weight=1)
         
         # --- Left Panel: Available Assets ---
-        ctk.CTkLabel(lists_frame, text="Available Assets", font=("Segoe UI", 14, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ctk.CTkLabel(lists_frame, text="Activos Disponibles", font=("Segoe UI", 14, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
         
-        left_search = ctk.CTkEntry(lists_frame, placeholder_text="Search...", height=38, font=("Segoe UI", 13))
+        left_search = ctk.CTkEntry(lists_frame, placeholder_text="Buscar...", height=38, font=("Segoe UI", 13))
         left_search.grid(row=0, column=0, sticky="e", pady=(0, 8))
 
         from virtual_list import VirtualList
@@ -1131,7 +1131,7 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         btn_frame.grid(row=1, column=1, padx=10)
         
         # --- Right Panel: Selected Assets ---
-        ctk.CTkLabel(lists_frame, text="Selected Assets", font=("Segoe UI", 14, "bold")).grid(row=0, column=2, sticky="w", pady=(0, 8))
+        ctk.CTkLabel(lists_frame, text="Activos Seleccionados", font=("Segoe UI", 14, "bold")).grid(row=0, column=2, sticky="w", pady=(0, 8))
         
         selected_list = VirtualList(lists_frame, item_height=50, command_double_click=lambda item: remove_selected(item))
         selected_list.grid(row=1, column=2, sticky="nsew", padx=(8, 0))
@@ -1222,7 +1222,7 @@ El siguiente contenido incluye múltiples archivos/funciones/clases que forman p
         
         ctk.CTkButton(
             window,
-            text="Create Asset",
+            text="Crear Componente",
             command=create,
             fg_color="#00695C",
             hover_color="#004D40",
