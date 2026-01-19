@@ -1,0 +1,32 @@
+{
+  "name": "nose 1",
+  "asset_type": "Compound",
+  "documentation": "",
+  "children": [
+    {
+      "name": "get_language",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\asset_extractor.py",
+      "line_number": 97
+    },
+    {
+      "name": "scan_project_assets",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\asset_extractor.py",
+      "line_number": 126
+    },
+    {
+      "name": "filter_file_list",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\main.py",
+      "line_number": 185
+    },
+    {
+      "name": "__init__",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\main.py",
+      "line_number": 12
+    },
+    {
+      "name": "save_settings",
+      "file_path": "C:/Users/SERVIDOR/Desktop/Documentador-2REV/python_editor\\main.py",
+      "line_number": 134
+    }
+  ]
+}

@@ -2,63 +2,78 @@ import customtkinter as ctk
 import tkinter as tk
 
 class VirtualList(ctk.CTkFrame):
-    def __init__(self, master, item_height=35, use_checkboxes=False, **kwargs):
+    """
+    A virtual list that uses native canvas elements instead of embedded widgets.
+    This eliminates clipping issues during scroll.
+    """
+    def __init__(self, master, item_height=50, use_checkboxes=False, command_click=None, command_double_click=None, **kwargs):
         super().__init__(master, **kwargs)
         self.data = []
         self.item_height = item_height
         self.use_checkboxes = use_checkboxes
-        self.selected_items = set() # Stores items (must be hashable or use IDs)
+        self.command_click = command_click
+        self.command_double_click = command_double_click
+        self.selected_items = set()
+        self.total_height = 0
+        self.last_clicked_item = None
         
-        # Color setup (match CTK theme roughly)
-        self.bg_color = self._apply_appearance_mode(self._fg_color)
+        # Colors for different asset types
+        self.type_colors = {
+            'Function': {'bg': '#E3F2FD', 'text': '#0D47A1', 'hover': '#BBDEFB'},
+            'Class': {'bg': '#FFEBEE', 'text': '#B71C1C', 'hover': '#FFCDD2'},
+            'Region': {'bg': '#FFF3E0', 'text': '#E65100', 'hover': '#FFE0B2'},
+            'Component': {'bg': '#E8F5E9', 'text': '#1B5E20', 'hover': '#C8E6C9'},
+            'Variable': {'bg': '#FCE4EC', 'text': '#880E4F', 'hover': '#F8BBD0'},
+            'Constant': {'bg': '#FCE4EC', 'text': '#880E4F', 'hover': '#F8BBD0'},
+            'Compound': {'bg': '#E0F2F1', 'text': '#00695C', 'hover': '#B2DFDB'},
+            'default': {'bg': '#3D3D3D', 'text': '#FFFFFF', 'hover': '#4D4D4D'}
+        }
         
-        # Canvas for scrolling
+        # Canvas for drawing
         self.canvas = tk.Canvas(
             self, 
-            bg="#2B2B2B", # Approximation of dark ctk background
+            bg="#2B2B2B",
             highlightthickness=0,
             bd=0
         )
         
-        # Scrollbar (Pack first to ensure it gets space)
-        self.scrollbar = ctk.CTkScrollbar(self, command=self.canvas.yview)
+        # Scrollbar
+        self.scrollbar = ctk.CTkScrollbar(self, command=self._on_scrollbar)
         self.scrollbar.pack(side="right", fill="y")
         
         self.canvas.pack(side="left", fill="both", expand=True)
-
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         # Bindings
-        self.canvas.bind("<Configure>", self.on_resize)
-        self.canvas.bind("<MouseWheel>", self.on_mousewheel) # Windows/MacOS
-        # Linux might need Button-4/5
+        self.canvas.bind("<Configure>", self._on_configure)
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind("<Button-4>", self._on_mousewheel)  # Linux
+        self.canvas.bind("<Button-5>", self._on_mousewheel)  # Linux
+        self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<Double-Button-1>", self._on_double_click)
+        self.canvas.bind("<Motion>", self._on_motion)
+        self.canvas.bind("<Leave>", self._on_leave)
         
         # State
-        self.visible_widgets = {} # index -> widget
-        self.current_start_idx = -1
-        self.current_end_idx = -1
-        
-        # Theme autodetect workaround (simple)
-        self.text_color = "white"
+        self.hover_index = -1
+        self._needs_redraw = False
 
     def set_data(self, data):
-        """
-        data: list of objects to render. 
-        Each object should ideally have a string representation.
-        """
-        # Clear existing widgets to force recreation with new content
-        for widget in self.visible_widgets.values():
-            widget.destroy()
-        self.visible_widgets.clear()
-        self.canvas.delete("all")
-        
-        self.data = data
-        self.total_height = len(data) * self.item_height
-        self.canvas.configure(scrollregion=(0, 0, 0, self.total_height))
-        self.refresh_view()
+        """Set the data to display in the list."""
+        self.data = data if data else []
+        self.total_height = len(self.data) * self.item_height
+        self.canvas.configure(scrollregion=(0, 0, self.canvas.winfo_width(), self.total_height))
+        self.canvas.yview_moveto(0)
+        self._redraw()
 
     def get_selected_items(self):
         return list(self.selected_items)
+    
+    def get_clicked_item(self):
+        return self.last_clicked_item
+    
+    def set_clicked_item(self, item):
+        self.last_clicked_item = item
 
     def toggle_selection(self, item):
         if item in self.selected_items:
@@ -66,196 +81,189 @@ class VirtualList(ctk.CTkFrame):
         else:
             self.selected_items.add(item)
 
-    def on_resize(self, event):
-        self.refresh_view()
-        
-    def on_mousewheel(self, event):
-        # Cross-platform scrolling
-        # Windows/MacOS: event.delta
-        # Linux: Button-4/Button-5 events (handled separately usually, but often mapped to MouseWheel in newer Tk)
-        
-        # On macOS, delta is often larger or handled differently.
-        # We generally want to scroll the canvas yview.
-        try:
-            if event.delta:
-                # MacOS/Windows
-                # Different scaling: Windows usually 120, Mac variable.
-                # Canvas yview_scroll expects 'units' or 'pages'.
-                # Negative delta usually means scroll down (content moves up)
-                
-                # Normalize a bit
-                delta = event.delta
-                if abs(delta) >= 120:
-                     # Classic mouse wheel step
-                    scrolling = int(-1*(delta/120))
-                else:
-                    # Touchpad or weak scroll
-                    scrolling = int(-1 * delta)
-                
-                self.canvas.yview_scroll(scrolling, "units")
-            elif event.num == 4:
-                # Linux scroll up
-                self.canvas.yview_scroll(-1, "units")
-            elif event.num == 5:
-                # Linux scroll down
-                self.canvas.yview_scroll(1, "units")
-                
-            self.refresh_view()
-        except Exception:
-            pass
-
-    def on_scroll(self, *args):
-        # Connect to scrollbar
+    def _on_scrollbar(self, *args):
+        """Handle scrollbar interaction."""
         self.canvas.yview(*args)
-        self.refresh_view()
+        self._redraw()
 
-    def refresh_view(self):
-        if not self.data:
-            self.canvas.delete("all")
+    def _on_configure(self, event):
+        """Handle canvas resize."""
+        self.canvas.configure(scrollregion=(0, 0, event.width, self.total_height))
+        self._redraw()
+
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scroll."""
+        if not self.data or self.total_height <= 0:
             return
-
-        # Calculate visible range
-        canvas_height = self.canvas.winfo_height()
-        if canvas_height <= 1: return
-
-        # Get vertical scroll position (0.0 to 1.0)
-        y_view = self.canvas.yview()
-        top_y = y_view[0] * self.total_height
-        bottom_y = y_view[1] * self.total_height
         
-        start_idx = int(top_y // self.item_height)
-        end_idx = int(bottom_y // self.item_height) + 1
-        
-        # Clamp
-        start_idx = max(0, start_idx)
-        end_idx = min(len(self.data), end_idx)
-        
-        # Optimize: If range didn't change heavily, only update edges?
-        # For simplicity in V1, we'll reconcile.
-
-        # Identify which indices we need
-        needed_indices = set(range(start_idx, end_idx))
-        current_indices = set(self.visible_widgets.keys())
-        
-        # Destroy widgets no longer needed
-        to_remove = current_indices - needed_indices
-        for idx in to_remove:
-            widget = self.visible_widgets.pop(idx)
-            widget.destroy()
-            
-        # Metrics
-        canvas_width = self.canvas.winfo_width()
-        # Increase margin to avoid right-side clipping (scrollbar overlap or DPI issues)
-        # 10px left, 15px right (total 25 reduction) -> reduced from 40
-        item_width = max(1, canvas_width - 25) 
-        item_actual_height = self.item_height - 6 # Slightly less gap (6px instead of 8)
-        x_pos = 10 # 10px left margin
-        
-        # Update/Create loop
-        # We iterate over needed_indices to ensure everyone is correct (size/pos)
-        # Note: canvas.itemconfigure is efficient
-        
-        for idx in needed_indices:
-            y_pos = idx * self.item_height + 3 # 3px top padding/centering in slot
-
-            if idx in self.visible_widgets:
-                # Update existing
-                self.canvas.itemconfigure(f"row_{idx}", width=item_width, height=item_actual_height)
-                self.canvas.coords(f"row_{idx}", x_pos, y_pos)
+        if hasattr(event, 'delta') and event.delta:
+            delta = event.delta
+            if abs(delta) >= 120:
+                scroll_amount = int(-1 * (delta / 120))
             else:
-                # Create new
-                item = self.data[idx]
-                
-                # Use CTkButton for the "Box" look - it handles borders/bg/text robustness better than Frame
-                # We disable hover effect if not desired, or keep it for interactivity
-                command = None
-                if self.use_checkboxes:
-                    command = lambda i=item: self.toggle_selection(i)
-
-                widget = ctk.CTkButton(
-                    self.canvas,
-                    text="", # Set in configure
-                    height=item_actual_height,
-                    corner_radius=6,
-                    border_width=2,
-                    anchor="w", # Left align text
-                    font=("Segoe UI", 12, "bold"),
-                    command=command
-                )
-                
-                # Configure Content
-                self.configure_item_widget(widget, item)
-
-                # Add to canvas
-                self.canvas.create_window(
-                    x_pos, y_pos, 
-                    window=widget, 
-                    anchor="nw", 
-                    width=item_width, 
-                    height=item_actual_height,
-                    tags=f"row_{idx}"
-                )
-                self.visible_widgets[idx] = widget
-
-    def configure_item_widget(self, widget, item):
-        display_text = str(item)
+                scroll_amount = -1 if delta > 0 else 1
+            self.canvas.yview_scroll(scroll_amount, "units")
+        elif event.num == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self.canvas.yview_scroll(1, "units")
         
-        # Default colors
-        fg_color = "transparent"
-        text_color = "white"
-        hover_color = "#333333" # Fallback
-        
-        # Check selection state if mode is active
-        is_selected = False
-        if self.use_checkboxes:
-             is_selected = item in self.selected_items
+        self._redraw()
 
-        if hasattr(item, 'name'):
-            display_text = f"  {item.name}" # Add indent for look
-            
-            # Add checkbox indicator
+    def _on_click(self, event):
+        """Handle click on an item."""
+        idx = self._get_index_at_y(event.y)
+        if 0 <= idx < len(self.data):
+            item = self.data[idx]
+            self.set_clicked_item(item)
             if self.use_checkboxes:
-                 prefix = "☑" if is_selected else "☐"
-                 display_text = f"  {prefix} {item.name}"
+                self.toggle_selection(item)
+            if self.command_click:
+                self.command_click(item)
+            self._redraw()
+
+    def _on_double_click(self, event):
+        """Handle double-click on an item."""
+        idx = self._get_index_at_y(event.y)
+        if 0 <= idx < len(self.data):
+            item = self.data[idx]
+            self.last_clicked_item = item # Update last clicked
+            if self.command_double_click:
+                self.command_double_click(item)
+            self._redraw()
+
+    def _on_motion(self, event):
+        """Handle mouse motion for hover effect."""
+        new_hover = self._get_index_at_y(event.y)
+        if new_hover != self.hover_index:
+            self.hover_index = new_hover
+            self._redraw()
+
+    def _on_leave(self, event):
+        """Handle mouse leaving the canvas."""
+        if self.hover_index != -1:
+            self.hover_index = -1
+            self._redraw()
+
+    def _get_index_at_y(self, canvas_y):
+        """Get the data index at a given canvas y coordinate."""
+        if not self.data:
+            return -1
+        # Convert canvas y to scroll position
+        scroll_top = self.canvas.canvasy(0)
+        actual_y = scroll_top + canvas_y
+        idx = int(actual_y // self.item_height)
+        return idx if 0 <= idx < len(self.data) else -1
+
+    def _get_item_colors(self, item, is_hovered, is_selected):
+        """Get colors for an item based on its type and state."""
+        asset_type = getattr(item, 'asset_type', 'default')
+        colors = self.type_colors.get(asset_type, self.type_colors['default'])
+        
+        if is_hovered:
+            bg = colors['hover']
+        else:
+            bg = colors['bg']
+        
+        text_color = colors['text']
+        border_color = '#00E676' if is_selected else text_color
+        
+        return bg, text_color, border_color
+
+    def _get_display_text(self, item, is_selected):
+        """Get the display text for an item."""
+        if hasattr(item, 'name'):
+            if self.use_checkboxes:
+                prefix = "☑" if is_selected else "☐"
+                return f"  {prefix} {item.name}"
+            return f"  {item.name}"
+        return f"  {str(item)}"
+
+    def _redraw(self):
+        """Redraw all visible items using native canvas elements."""
+        self.canvas.delete("all")
+        
+        if not self.data:
+            return
+        
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        
+        if canvas_width <= 1 or canvas_height <= 1:
+            return
+        
+        # Get visible range
+        scroll_top = self.canvas.canvasy(0)
+        scroll_bottom = scroll_top + canvas_height
+        
+        start_idx = max(0, int(scroll_top // self.item_height))
+        end_idx = min(len(self.data), int(scroll_bottom // self.item_height) + 1)
+        
+        # Dimensions
+        margin_left = 12
+        margin_right = 18
+        item_width = canvas_width - margin_left - margin_right
+        item_actual_height = self.item_height - 8
+        corner_radius = 8
+        
+        for idx in range(start_idx, end_idx):
+            item = self.data[idx]
             
-            if item.asset_type == 'Function':
-                fg_color = "#E3F2FD"
-                text_color = "#0D47A1"
-                hover_color = "#BBDEFB"
-            elif item.asset_type == 'Class':
-                fg_color = "#FFEBEE"
-                text_color = "#B71C1C"
-                hover_color = "#FFCDD2"
-            elif item.asset_type == 'Region':
-                fg_color = "#FFF3E0"
-                text_color = "#E65100"
-                hover_color = "#FFE0B2"
-            elif item.asset_type == 'Component':
-                fg_color = "#E8F5E9"
-                text_color = "#1B5E20"
-                hover_color = "#C8E6C9"
-            elif item.asset_type == 'Variable' or item.asset_type == 'Constant':
-                fg_color = "#FCE4EC"
-                text_color = "#880E4F"
-                hover_color = "#F8BBD0"
-            elif item.asset_type == 'Compound':
-                fg_color = "#E0F2F1"   # Light Emerald/Teal
-                text_color = "#00695C" # Deep Emerald/Teal
-                hover_color = "#B2DFDB"
-        
-        border_color = text_color
-        # Optionally highlight border heavily if selected
-        if is_selected:
-            border_color = "#00E676" # Bright Green or use text_color
+            # Check if item has depth (for tree nodes)
+            item_depth = getattr(item, 'depth', 0) if hasattr(item, 'depth') else 0
+            depth_margin = item_depth * 30  # 30 pixels per depth level for better visibility
+            
+            # Calculate position with depth margin
+            y_top = idx * self.item_height + 3
+            y_bottom = y_top + item_actual_height
+            x_left = margin_left + depth_margin
+            x_right = margin_left + item_width  # Keep right edge fixed
+            
+            # Get colors
+            is_hovered = (idx == self.hover_index)
+            is_selected = item in self.selected_items
+            bg_color, text_color, border_color = self._get_item_colors(item, is_hovered, is_selected)
+            
+            # Draw rounded rectangle (using polygon for simplicity)
+            self._draw_rounded_rect(
+                x_left, y_top, x_right, y_bottom,
+                corner_radius, bg_color, border_color
+            )
+            
+            # Draw text
+            display_text = self._get_display_text(item, is_selected)
+            text_y = (y_top + y_bottom) / 2
+            self.canvas.create_text(
+                x_left + 12, text_y,
+                text=display_text,
+                anchor="w",
+                fill=text_color,
+                font=("Segoe UI", 14, "bold")
+            )
 
-        widget.configure(
-            text=display_text,
-            fg_color=fg_color,
-            text_color=text_color,
-            border_color=border_color,
-            hover_color=hover_color
+    def _draw_rounded_rect(self, x1, y1, x2, y2, radius, fill, outline):
+        """Draw a rounded rectangle on the canvas."""
+        # Create rounded rectangle using arcs and lines
+        points = [
+            x1 + radius, y1,       # Top edge start
+            x2 - radius, y1,       # Top edge end
+            x2, y1,                # Top right corner control
+            x2, y1 + radius,       # Right edge start
+            x2, y2 - radius,       # Right edge end
+            x2, y2,                # Bottom right corner control
+            x2 - radius, y2,       # Bottom edge start
+            x1 + radius, y2,       # Bottom edge end
+            x1, y2,                # Bottom left corner control
+            x1, y2 - radius,       # Left edge start
+            x1, y1 + radius,       # Left edge end
+            x1, y1,                # Top left corner control
+            x1 + radius, y1        # Back to start
+        ]
+        
+        self.canvas.create_polygon(
+            points, 
+            fill=fill, 
+            outline=outline, 
+            width=2,
+            smooth=True
         )
-        
-        # Bind scrolling to the widget
-        widget.bind("<MouseWheel>", self.on_mousewheel)
-
